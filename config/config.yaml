@@ -1,0 +1,45 @@
+# Adaptive IDS Configuration File
+
+# Model Configuration
+model:
+  name: "DQN_MLP"
+  input_dim: 78  # Number of input features
+  output_dim: 2  # Binary classification (benign/attack)
+  hidden_dims: [256, 128]
+  dropout: 0.2
+  learning_rate: 0.0002
+  weight_decay: 0.00001
+
+# Training Configuration
+training:
+  epochs: 30
+  batch_size: 512
+  validation_split: 0.2
+  early_stopping_patience: 10
+  save_best_model: true
+  
+# Data Configuration
+data:
+  data_dir: "data/"
+  cache_dir: "checkpoints/cache/"
+  checkpoint_dir: "checkpoints/"
+  log_dir: "runs/"
+  
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 5000
+  debug: false
+  cors_enabled: true
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/adaptive_ids.log"
+
+# Security Configuration
+security:
+  max_request_size: 10485760  # 10MB
+  rate_limit: "1000 per hour"
+  api_key_required: false
