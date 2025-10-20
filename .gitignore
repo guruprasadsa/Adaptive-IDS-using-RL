@@ -57,6 +57,8 @@ pnpm-debug.log*
 
 # Backend Specific
 backend/model/cache/*.npy
+backend/model/cache/*.dat
+backend/model/cache/X_mem.dat
 backend/model/logs/*
 !backend/model/logs/.gitkeep
 backend/__pycache__/
