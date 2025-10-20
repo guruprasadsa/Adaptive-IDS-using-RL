@@ -1,0 +1,5 @@
+{
+  "name": "Adaptive IDS Dashboard",
+  "description": "A modern web dashboard for an Adaptive Intrusion Detection System using reinforcement learning.",
+  "requestFramePermissions": []
+}

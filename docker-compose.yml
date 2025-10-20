@@ -1,0 +1,20 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    container_name: adaptive_ids_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: adaptive_ids
+      POSTGRES_PASSWORD: adaptive_ids_password
+      POSTGRES_DB: adaptive_ids
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+volumes:
+  postgres_data:
+    driver: local

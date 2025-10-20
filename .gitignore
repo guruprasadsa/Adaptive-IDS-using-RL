@@ -1,0 +1,123 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+.virtualenv/
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# PyCharm
+.idea/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Backend Specific
+backend/model/cache/*.npy
+backend/model/logs/*
+!backend/model/logs/.gitkeep
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.pyc
+
+# Frontend Specific
+frontend/frontend/node_modules/
+frontend/frontend/dist/
+frontend/frontend/dist-ssr/
+frontend/frontend/.vite/
+frontend/frontend/*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+db.sqlite3
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Personal Notes
+personal_note.txt
+notes.txt
+TODO.txt
+
+# Large Dataset Files (optional - uncomment if datasets are too large)
+# data/2017/*.csv
+# data/2018/*.csv
+
+# Model Checkpoints (optional - uncomment if too large)
+# backend/model/checkpoints/*.pth
+# backend/model/checkpoints/*.pt
+
+# Docker
+.dockerignore
+
+# Test Coverage
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Temporary files
+*.tmp
+temp/
+tmp/
+
+#datset
+*.csv
