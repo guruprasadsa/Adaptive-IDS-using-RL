@@ -1,4 +1,4 @@
-"""Seed PostgreSQL with mock Adaptive IDS data."""
+"""Development-only seeding script (disabled by default in production)."""
 from __future__ import annotations
 
 import json
@@ -91,12 +91,15 @@ def upsert_incident(cursor, incident: Dict[str, Any]) -> None:
 
 
 def main() -> None:
+    # Intentionally no-op in production: mock/demo seed file removed
     if not DATA_FILE.exists():
-        raise FileNotFoundError(f"Mock data JSON not found at {DATA_FILE}")
+        print("Seed file not found. Skipping migration (mock/demo data disabled).")
+        return
 
     alerts, incidents = load_mock_data(DATA_FILE)
     if not alerts and not incidents:
-        raise ValueError("No mock data available to migrate")
+        print("No seed records found. Skipping migration.")
+        return
 
     with get_connection() as conn:
         with conn.cursor() as cur:

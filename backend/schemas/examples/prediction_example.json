@@ -1,0 +1,22 @@
+{
+  "flow_id": "192.168.1.100:54321:10.0.0.50:80:TCP",
+  "timestamp": 1729468801500,
+  "class_idx": 5,
+  "class_name": "DDoS",
+  "confidence": 0.957,
+  "model_version": "v1.0",
+  "feature_version": "v1.0-cic41",
+  "agent_type": "ddos_specialist",
+  "all_class_probs": {
+    "Normal": 0.012,
+    "DoS": 0.015,
+    "DDoS": 0.957,
+    "PortScan": 0.008,
+    "BruteForce": 0.003,
+    "WebAttack": 0.002,
+    "Infiltration": 0.001,
+    "Botnet": 0.002
+  },
+  "inference_latency_ms": 23.5,
+  "schema_version": 1
+}

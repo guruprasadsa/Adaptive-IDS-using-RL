@@ -1,0 +1,28 @@
+{
+  "alert_id": "550e8400-e29b-41d4-a716-446655440000",
+  "flow_id": "192.168.1.100:54321:10.0.0.50:80:TCP",
+  "timestamp": 1729468802000,
+  "class_idx": 5,
+  "class_name": "DDoS",
+  "confidence": 0.957,
+  "severity": "CRITICAL",
+  "src_ip": "192.168.1.100",
+  "dst_ip": "10.0.0.50",
+  "src_port": 54321,
+  "dst_port": 80,
+  "protocol": "TCP",
+  "model_version": "v1.0",
+  "feature_version": "v1.0-cic41",
+  "enrichment": {
+    "src_geo": "US",
+    "dst_geo": "US",
+    "src_reputation": 0.85,
+    "dst_reputation": 0.92,
+    "tags": ["internal", "datacenter"]
+  },
+  "status": "NEW",
+  "assigned_to": null,
+  "notes": null,
+  "destinations": ["email", "syslog", "splunk"],
+  "schema_version": 1
+}

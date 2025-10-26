@@ -1,0 +1,416 @@
+{
+  "dashboard": {
+    "title": "Adaptive IDS - System Overview",
+    "description": "High-level overview of the Adaptive IDS system performance and health",
+    "tags": [
+      "adaptive-ids",
+      "overview",
+      "security"
+    ],
+    "timezone": "browser",
+    "schemaVersion": 36,
+    "version": 1,
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "System Health Status",
+        "type": "stat",
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "ids_service_health",
+            "legendFormat": "{{service}} - {{component}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "type": "value",
+                "value": "1",
+                "text": "Healthy",
+                "color": "green"
+              },
+              {
+                "type": "value",
+                "value": "0",
+                "text": "Unhealthy",
+                "color": "red"
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": 0,
+                  "color": "red"
+                },
+                {
+                  "value": 1,
+                  "color": "green"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Total Packets Processed",
+        "type": "stat",
+        "gridPos": {
+          "x": 6,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(ids_packets_processed_total[5m]))",
+            "legendFormat": "packets/sec",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "pps",
+            "decimals": 0
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Active Flows",
+        "type": "stat",
+        "gridPos": {
+          "x": 12,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "sum(ids_active_flows)",
+            "legendFormat": "active flows",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Alerts Created (Last Hour)",
+        "type": "stat",
+        "gridPos": {
+          "x": 18,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "sum(increase(ids_alerts_created_total[1h]))",
+            "legendFormat": "alerts",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": 0,
+                  "color": "green"
+                },
+                {
+                  "value": 100,
+                  "color": "yellow"
+                },
+                {
+                  "value": 500,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Packet Processing Rate",
+        "type": "graph",
+        "gridPos": {
+          "x": 0,
+          "y": 4,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rate(ids_packets_processed_total{status=\"success\"}[1m])",
+            "legendFormat": "{{service}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "pps",
+            "label": "Packets/sec"
+          },
+          {
+            "format": "short"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Flow Creation & Expiration",
+        "type": "graph",
+        "gridPos": {
+          "x": 12,
+          "y": 4,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rate(ids_flows_created_total[1m])",
+            "legendFormat": "Created",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(ids_flows_expired_total[1m])",
+            "legendFormat": "Expired - {{reason}}",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Flows/sec"
+          },
+          {
+            "format": "short"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Inference Latency (P95)",
+        "type": "graph",
+        "gridPos": {
+          "x": 0,
+          "y": 12,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(ids_inference_latency_seconds_bucket[5m]))",
+            "legendFormat": "P95 - {{service}}",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(ids_inference_latency_seconds_bucket[5m]))",
+            "legendFormat": "P50 - {{service}}",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "s",
+            "label": "Latency"
+          },
+          {
+            "format": "short"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Kafka Consumer Lag",
+        "type": "graph",
+        "gridPos": {
+          "x": 12,
+          "y": 12,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "ids_kafka_consumer_lag",
+            "legendFormat": "{{service}} - {{topic}} - p{{partition}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Messages"
+          },
+          {
+            "format": "short"
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  10000
+                ]
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "A",
+                  "5m",
+                  "now"
+                ]
+              },
+              "reducer": {
+                "type": "avg"
+              },
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "High Kafka Lag",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 9,
+        "title": "Alerts by Severity",
+        "type": "piechart",
+        "gridPos": {
+          "x": 0,
+          "y": 20,
+          "w": 8,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "sum by(severity) (increase(ids_alerts_created_total[1h]))",
+            "legendFormat": "{{severity}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Alerts by Class",
+        "type": "table",
+        "gridPos": {
+          "x": 8,
+          "y": 20,
+          "w": 16,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "sum by(class_name, severity) (increase(ids_alerts_created_total[1h]))",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "indexByName": {},
+              "renameByName": {
+                "class_name": "Attack Class",
+                "severity": "Severity",
+                "Value": "Count"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Error Rate",
+        "type": "graph",
+        "gridPos": {
+          "x": 0,
+          "y": 28,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rate(ids_errors_total[5m])",
+            "legendFormat": "{{service}} - {{error_type}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Errors/sec"
+          },
+          {
+            "format": "short"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Database Operation Latency",
+        "type": "graph",
+        "gridPos": {
+          "x": 12,
+          "y": 28,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(ids_db_operation_seconds_bucket[5m]))",
+            "legendFormat": "P95 - {{operation}} on {{table}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "s",
+            "label": "Latency"
+          },
+          {
+            "format": "short"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+# Stream processing state
+backend/stream/state/
+
+# Sensor captures (optional - don't commit large pcap files)
+backend/sensors/*.pcap
+backend/sensors/*.pcapng
+
+# Model service temporary files
+backend/model/service/tmp/
+
+# Alerting queue/state
+backend/alerting/queue/
+backend/alerting/state/
+
+# VS Code workspace settings (optional, adjust as needed)
+.vscode/settings.local.json

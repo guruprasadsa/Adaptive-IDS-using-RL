@@ -1,0 +1,188 @@
+{
+  "type": "record",
+  "name": "Alert",
+  "namespace": "com.adaptiveids.schemas",
+  "doc": "Enriched security alert derived from a prediction. Ready for persistence and external dispatch to SIEM, email, etc.",
+  "fields": [
+    {
+      "name": "alert_id",
+      "type": "string",
+      "doc": "Unique alert identifier (UUID)"
+    },
+    {
+      "name": "flow_id",
+      "type": "string",
+      "doc": "Flow identifier from prediction"
+    },
+    {
+      "name": "timestamp",
+      "type": "long",
+      "logicalType": "timestamp-millis",
+      "doc": "Alert creation time in milliseconds since epoch"
+    },
+    {
+      "name": "class_idx",
+      "type": "int",
+      "doc": "Attack class index from prediction"
+    },
+    {
+      "name": "class_name",
+      "type": "string",
+      "doc": "Attack class name from prediction"
+    },
+    {
+      "name": "confidence",
+      "type": "float",
+      "doc": "Prediction confidence [0.0, 1.0]"
+    },
+    {
+      "name": "severity",
+      "type": {
+        "type": "enum",
+        "name": "Severity",
+        "symbols": ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
+      },
+      "doc": "Alert severity level derived from class and confidence"
+    },
+    {
+      "name": "src_ip",
+      "type": "string",
+      "doc": "Source IP address"
+    },
+    {
+      "name": "dst_ip",
+      "type": "string",
+      "doc": "Destination IP address"
+    },
+    {
+      "name": "src_port",
+      "type": "int",
+      "doc": "Source port"
+    },
+    {
+      "name": "dst_port",
+      "type": "int",
+      "doc": "Destination port"
+    },
+    {
+      "name": "protocol",
+      "type": "string",
+      "doc": "Transport protocol"
+    },
+    {
+      "name": "model_version",
+      "type": "string",
+      "doc": "Model version from prediction"
+    },
+    {
+      "name": "feature_version",
+      "type": "string",
+      "doc": "Feature version from prediction"
+    },
+    {
+      "name": "enrichment",
+      "type": [
+        "null",
+        {
+          "type": "record",
+          "name": "Enrichment",
+          "fields": [
+            {
+              "name": "src_geo",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null,
+              "doc": "Source IP geolocation (e.g., 'US', 'CN')"
+            },
+            {
+              "name": "dst_geo",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null,
+              "doc": "Destination IP geolocation"
+            },
+            {
+              "name": "src_reputation",
+              "type": [
+                "null",
+                "float"
+              ],
+              "default": null,
+              "doc": "Source IP reputation score [0.0, 1.0] from threat intel"
+            },
+            {
+              "name": "dst_reputation",
+              "type": [
+                "null",
+                "float"
+              ],
+              "default": null,
+              "doc": "Destination IP reputation score"
+            },
+            {
+              "name": "tags",
+              "type": [
+                "null",
+                {
+                  "type": "array",
+                  "items": "string"
+                }
+              ],
+              "default": null,
+              "doc": "Custom tags (e.g., 'internal', 'dmz', 'whitelisted')"
+            }
+          ]
+        }
+      ],
+      "default": null,
+      "doc": "Optional enrichment data from external sources"
+    },
+    {
+      "name": "status",
+      "type": {
+        "type": "enum",
+        "name": "AlertStatus",
+        "symbols": ["NEW", "ACKNOWLEDGED", "IN_PROGRESS", "RESOLVED", "FALSE_POSITIVE"]
+      },
+      "default": "NEW",
+      "doc": "Alert workflow status"
+    },
+    {
+      "name": "assigned_to",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null,
+      "doc": "User or team assigned to handle the alert"
+    },
+    {
+      "name": "notes",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null,
+      "doc": "Analyst notes or comments"
+    },
+    {
+      "name": "destinations",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "default": [],
+      "doc": "List of dispatch targets (e.g., 'email', 'syslog', 'splunk')"
+    },
+    {
+      "name": "schema_version",
+      "type": "int",
+      "default": 1,
+      "doc": "Schema version number for backward compatibility"
+    }
+  ]
+}

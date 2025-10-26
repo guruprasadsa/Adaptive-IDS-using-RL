@@ -1,0 +1,104 @@
+{
+  "comment": "Online Learning and Drift Detection Configuration",
+  "drift_detection": {
+    "enabled": true,
+    "adwin": {
+      "delta": 0.002,
+      "window_size": 1000
+    },
+    "ddm": {
+      "warning_level": 2.0,
+      "drift_level": 3.0,
+      "min_samples": 30
+    },
+    "psi": {
+      "n_bins": 10,
+      "threshold": 0.2,
+      "features_to_monitor": [
+        "flow_duration",
+        "total_fwd_packets",
+        "total_bwd_packets",
+        "flow_bytes_per_sec",
+        "flow_packets_per_sec",
+        "avg_packet_size",
+        "max_packet_length",
+        "init_win_bytes_fwd",
+        "active_mean",
+        "idle_mean"
+      ]
+    },
+    "js_divergence": {
+      "threshold": 0.1,
+      "window_size": 1000
+    },
+    "alert_severity_thresholds": {
+      "low": 0,
+      "medium": 1,
+      "high": 2,
+      "critical": 3
+    }
+  },
+  "online_learning": {
+    "enabled": true,
+    "buffer_size": 10000,
+    "fp_buffer_size": 5000,
+    "registry_dir": "backend/model/registry",
+    "training": {
+      "device": "cuda",
+      "batch_size": 128,
+      "learning_rate": 0.0001,
+      "num_epochs": 3,
+      "min_samples_for_training": 500,
+      "fp_ratio": 0.3,
+      "gradient_clip": 1.0
+    },
+    "ewc": {
+      "enabled": true,
+      "lambda": 1000.0,
+      "fisher_samples": 1000
+    },
+    "validation": {
+      "min_tpr": 0.985,
+      "max_fpr": 0.01,
+      "min_samples": 1000,
+      "use_validation_set": true,
+      "validation_split": 0.2
+    },
+    "scheduling": {
+      "mode": "interval",
+      "interval_hours": 24,
+      "specific_time": null,
+      "min_hours_between_training": 6
+    },
+    "model_management": {
+      "max_versions_to_keep": 10,
+      "auto_cleanup_retired": true,
+      "shadow_evaluation_samples": 5000,
+      "rollback_on_degradation": true
+    }
+  },
+  "prometheus": {
+    "enabled": true,
+    "port": 9091,
+    "metrics": {
+      "drift_scores": true,
+      "drift_alerts": true,
+      "buffer_sizes": true,
+      "training_metrics": true,
+      "model_metrics": true
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/online_learning.log",
+    "max_bytes": 10485760,
+    "backup_count": 5,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  },
+  "alerts": {
+    "drift_alert_cooldown_minutes": 60,
+    "training_failure_alert": true,
+    "validation_failure_alert": true,
+    "buffer_full_warning_threshold": 0.9
+  }
+}

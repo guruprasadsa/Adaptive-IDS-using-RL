@@ -1,0 +1,80 @@
+{
+  "type": "record",
+  "name": "Prediction",
+  "namespace": "com.adaptiveids.schemas",
+  "doc": "Model inference prediction for a network flow. Contains attack classification results from multi-agent DQN.",
+  "fields": [
+    {
+      "name": "flow_id",
+      "type": "string",
+      "doc": "Flow identifier matching FlowFeatures.flow_id"
+    },
+    {
+      "name": "timestamp",
+      "type": "long",
+      "logicalType": "timestamp-millis",
+      "doc": "Prediction time in milliseconds since epoch"
+    },
+    {
+      "name": "class_idx",
+      "type": "int",
+      "doc": "Numeric class index (0-15+) from model output"
+    },
+    {
+      "name": "class_name",
+      "type": "string",
+      "doc": "Human-readable attack class name (e.g., 'DDoS', 'PortScan', 'Normal')"
+    },
+    {
+      "name": "confidence",
+      "type": "float",
+      "doc": "Prediction confidence score [0.0, 1.0] after calibration (softmax probability)"
+    },
+    {
+      "name": "model_version",
+      "type": "string",
+      "doc": "Model version identifier (e.g., 'v1.0', 'run_1758022767')"
+    },
+    {
+      "name": "feature_version",
+      "type": "string",
+      "doc": "Feature extraction version that produced the input. Must match FlowFeatures.feature_version."
+    },
+    {
+      "name": "agent_type",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null,
+      "doc": "Which specialist agent made the prediction (e.g., 'router', 'ddos_specialist')"
+    },
+    {
+      "name": "all_class_probs",
+      "type": [
+        "null",
+        {
+          "type": "map",
+          "values": "float"
+        }
+      ],
+      "default": null,
+      "doc": "Optional full probability distribution over all classes for advanced analysis"
+    },
+    {
+      "name": "inference_latency_ms",
+      "type": [
+        "null",
+        "float"
+      ],
+      "default": null,
+      "doc": "Inference latency in milliseconds"
+    },
+    {
+      "name": "schema_version",
+      "type": "int",
+      "default": 1,
+      "doc": "Schema version number for backward compatibility"
+    }
+  ]
+}

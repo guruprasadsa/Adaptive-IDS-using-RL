@@ -1,6 +1,7 @@
-version: '3.9'
+version: "3.9"
 
 services:
+  # PostgreSQL Database
   postgres:
     image: postgres:14-alpine
     container_name: adaptive_ids_postgres
@@ -14,7 +15,450 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adaptive_ids"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Kafka (KRaft mode - no Zookeeper required)
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: adaptive_ids_kafka
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9092:9092"
+      - "127.0.0.1:9101:9101"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:29093"
+      KAFKA_LISTENERS: "PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LOG_DIRS: "/tmp/kraft-combined-logs"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "kafka-broker-api-versions --bootstrap-server localhost:9092",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # Schema Registry
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.0
+    container_name: adaptive_ids_schema_registry
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "kafka:29092"
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
+      SCHEMA_REGISTRY_MODE_MUTABILITY: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/subjects || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API (Flask)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: adaptive_ids_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:5001:5001"
+    environment:
+      - FLASK_APP=api.app:app
+      - FLASK_ENV=development
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - KAFKA_BROKERS=kafka:29092
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+    command: python -m flask run --host=0.0.0.0 --port=5001
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5001/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Model Inference Service
+  model-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.model
+    container_name: adaptive_ids_model_service
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - FEATURES_TOPIC=flows.features
+      - PRED_TOPIC=predictions
+      - CONSUMER_GROUP=model-inference-service
+      - MODEL_PATH=/app/model/checkpoints/final_model.pth
+      - MODEL_VERSION=v1.0
+      - FEATURE_VERSION=v1.0
+      - LABEL_CLASSES_PATH=/app/model/checkpoints/label_classes.json
+      - CONFIG_PATH=/app/model/checkpoints/config.json
+      - DEVICE=cuda
+      - BATCH_SIZE=256
+      - MAX_BATCH_WAIT_MS=50
+      - CONFIDENCE_THRESHOLD=0.5
+      - CALIBRATION_TEMP=1.5
+      - NUM_WORKERS=2
+      - PREFETCH_COUNT=100
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+    command: uvicorn model.service.app:app --host 0.0.0.0 --port 8000 --workers 1
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # GPU and Resource configuration
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 4G
+        reservations:
+          cpus: "2.0"
+          memory: 2G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Packet Producer - Replays CSV traffic data from CICIDS dataset
+  packet-producer:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: adaptive_ids_packet_producer
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - RAW_PACKETS_TOPIC=raw.packets
+      - RATE_PPS=100
+      - BURST_ENABLED=true
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+    command: python -m sensors.traffic_simulator
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'sensors.traffic_simulator' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Feature Extractor - Extracts features from raw packets
+  feature-extractor:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: adaptive_ids_feature_extractor
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      packet-producer:
+        condition: service_started
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - RAW_PACKETS_TOPIC=raw.packets
+      - FLOWS_FEATURES_TOPIC=flows.features
+      - CONSUMER_GROUP=feature-extractor-service
+      - FLOW_TIMEOUT=120
+      - BATCH_SIZE=100
+      - FEATURE_VERSION=v1.0
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+    command: python -m stream.feature_extractor
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'stream.feature_extractor' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+  # Alerting Service
+  alerting-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: adaptive_ids_alerting
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      model-service:
+        condition: service_healthy
+    environment:
+      # Kafka
+      - KAFKA_BROKERS=kafka:29092
+      - PRED_TOPIC=predictions
+      - ALERT_CONSUMER_GROUP=alerting-service
+
+      # Database
+      - PG_DSN=host=postgres port=5432 dbname=adaptive_ids user=adaptive_ids password=adaptive_ids_password
+
+      # OpenTelemetry
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+      - alert_logs:/var/log/adaptive-ids
+    command: python -m alerting.alerter
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'alerting.alerter' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+  # Traffic Statistics Aggregator - Real-time traffic metrics for dashboard
+  traffic-stats:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: adaptive_ids_traffic_stats
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      packet-producer:
+        condition: service_started
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - RAW_PACKETS_TOPIC=raw.packets
+      - TRAFFIC_STATS_TOPIC=traffic.stats
+      - WINDOW_SECONDS=1
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+    command: python -m api.traffic_stats
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'api.traffic_stats' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+  # Prometheus - Metrics Collection
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: adaptive_ids_prometheus
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana - Visualization & Dashboards
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: adaptive_ids_grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./documentation/grafana-dashboards:/var/lib/grafana/dashboards:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # OpenTelemetry Collector - Trace Aggregation
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.91.0
+    container_name: adaptive_ids_otel_collector
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4317:4317" # OTLP gRPC receiver
+      - "127.0.0.1:4318:4318" # OTLP HTTP receiver
+      - "127.0.0.1:8888:8888" # Metrics endpoint
+      - "127.0.0.1:13133:13133" # Health check
+    volumes:
+      - ./config/otel-collector-config.yml:/etc/otel-collector-config.yml:ro
+    command: ["--config=/etc/otel-collector-config.yml"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:13133/ || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Jaeger - Distributed Tracing UI
+  jaeger:
+    image: jaegertracing/all-in-one:1.52
+    container_name: adaptive_ids_jaeger
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:16686:16686" # Jaeger UI
+      - "127.0.0.1:14268:14268" # Jaeger collector HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=memory
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:14269/ || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend - React Dashboard
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: adaptive_ids_frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --quiet --tries=1 --spider http://localhost/health || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
 volumes:
   postgres_data:
+    driver: local
+  kafka_data:
+    driver: local
+  alert_logs:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  jaeger_data:
     driver: local

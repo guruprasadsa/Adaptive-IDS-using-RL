@@ -1,0 +1,347 @@
+{
+  "dashboard": {
+    "title": "Adaptive IDS - ML Model Performance",
+    "description": "Machine learning model performance metrics including inference latency, throughput, and drift detection",
+    "tags": [
+      "adaptive-ids",
+      "ml",
+      "model",
+      "performance"
+    ],
+    "timezone": "browser",
+    "schemaVersion": 36,
+    "version": 1,
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Model Readiness",
+        "type": "stat",
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "ids_model_ready",
+            "legendFormat": "{{model_version}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "type": "value",
+                "value": "1",
+                "text": "Ready",
+                "color": "green"
+              },
+              {
+                "type": "value",
+                "value": "0",
+                "text": "Not Ready",
+                "color": "red"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Inference Throughput",
+        "type": "stat",
+        "gridPos": {
+          "x": 6,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(ids_predictions_total{status=\"success\"}[5m]))",
+            "legendFormat": "predictions/sec",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Scaler Samples",
+        "type": "stat",
+        "gridPos": {
+          "x": 12,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "ids_scaler_samples",
+            "legendFormat": "{{feature_version}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Drift Score",
+        "type": "gauge",
+        "gridPos": {
+          "x": 18,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "max(ids_drift_score)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "max": 1,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": 0,
+                  "color": "green"
+                },
+                {
+                  "value": 0.3,
+                  "color": "yellow"
+                },
+                {
+                  "value": 0.7,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Inference Latency Distribution",
+        "type": "graph",
+        "gridPos": {
+          "x": 0,
+          "y": 4,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, rate(ids_inference_latency_seconds_bucket[5m]))",
+            "legendFormat": "P99",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(ids_inference_latency_seconds_bucket[5m]))",
+            "legendFormat": "P95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(ids_inference_latency_seconds_bucket[5m]))",
+            "legendFormat": "P50 (Median)",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Latency"
+          },
+          {
+            "format": "short"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Batch Processing Time",
+        "type": "graph",
+        "gridPos": {
+          "x": 12,
+          "y": 4,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rate(ids_batch_processing_seconds_sum[5m]) / rate(ids_batch_processing_seconds_count[5m])",
+            "legendFormat": "{{stage}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "s",
+            "label": "Time"
+          },
+          {
+            "format": "short"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Predictions by Class",
+        "type": "graph",
+        "gridPos": {
+          "x": 0,
+          "y": 12,
+          "w": 24,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rate(ids_predictions_total{status=\"success\"}[5m])",
+            "legendFormat": "{{class_name}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Predictions/sec"
+          },
+          {
+            "format": "short"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "False Positive Rate",
+        "type": "graph",
+        "gridPos": {
+          "x": 0,
+          "y": 20,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(ids_false_positives_total[1h])) / (sum(rate(ids_false_positives_total[1h])) + sum(rate(ids_true_positives_total[1h])))",
+            "legendFormat": "FP Rate",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "percentunit",
+            "label": "FP Rate",
+            "max": 0.1,
+            "min": 0
+          },
+          {
+            "format": "short"
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0.01
+                ]
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "A",
+                  "10m",
+                  "now"
+                ]
+              },
+              "reducer": {
+                "type": "avg"
+              },
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "5m",
+          "handler": 1,
+          "name": "High False Positive Rate",
+          "noDataState": "no_data"
+        }
+      },
+      {
+        "id": 9,
+        "title": "Drift Events",
+        "type": "graph",
+        "gridPos": {
+          "x": 12,
+          "y": 20,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rate(ids_drift_detected_total[5m])",
+            "legendFormat": "{{detector_type}} - {{severity}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Events/sec"
+          },
+          {
+            "format": "short"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Feature Drift by Feature",
+        "type": "heatmap",
+        "gridPos": {
+          "x": 0,
+          "y": 28,
+          "w": 24,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "ids_drift_score",
+            "legendFormat": "{{feature}}",
+            "refId": "A"
+          }
+        ],
+        "dataFormat": "timeseries",
+        "yAxis": {
+          "format": "short",
+          "label": "Feature"
+        }
+      }
+    ]
+  }
+}

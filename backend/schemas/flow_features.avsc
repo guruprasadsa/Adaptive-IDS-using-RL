@@ -1,0 +1,84 @@
+{
+  "type": "record",
+  "name": "FlowFeatures",
+  "namespace": "com.adaptiveids.schemas",
+  "doc": "Network flow features extracted from packets for ML inference. Contains 41+ statistical features aligned with CICFlowMeter and the trained model.",
+  "fields": [
+    {
+      "name": "flow_id",
+      "type": "string",
+      "doc": "Unique flow identifier based on 5-tuple (src_ip:src_port:dst_ip:dst_port:protocol)"
+    },
+    {
+      "name": "timestamp",
+      "type": "long",
+      "logicalType": "timestamp-millis",
+      "doc": "Flow start time in milliseconds since epoch"
+    },
+    {
+      "name": "src_ip",
+      "type": "string",
+      "doc": "Source IP address"
+    },
+    {
+      "name": "dst_ip",
+      "type": "string",
+      "doc": "Destination IP address"
+    },
+    {
+      "name": "src_port",
+      "type": "int",
+      "doc": "Source port number"
+    },
+    {
+      "name": "dst_port",
+      "type": "int",
+      "doc": "Destination port number"
+    },
+    {
+      "name": "protocol",
+      "type": "string",
+      "doc": "Transport protocol (TCP, UDP, ICMP, etc.)"
+    },
+    {
+      "name": "features",
+      "type": {
+        "type": "array",
+        "items": "float"
+      },
+      "doc": "Array of 41 normalized float features. Order must match feature_version specification."
+    },
+    {
+      "name": "feature_names",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "default": [],
+      "doc": "Optional human-readable feature names corresponding to features array"
+    },
+    {
+      "name": "feature_version",
+      "type": "string",
+      "doc": "Hash or version identifier of the feature extraction algorithm (e.g., 'v1.0-cic41'). Must match model training."
+    },
+    {
+      "name": "schema_version",
+      "type": "int",
+      "default": 1,
+      "doc": "Schema version number for backward compatibility"
+    },
+    {
+      "name": "metadata",
+      "type": [
+        "null",
+        {
+          "type": "map",
+          "values": "string"
+        }
+      ],
+      "default": null,
+      "doc": "Optional metadata for debugging or enrichment (e.g., sensor_id, capture_interface)"
+    }
+  ]
+}

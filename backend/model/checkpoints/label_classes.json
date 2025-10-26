@@ -1,0 +1,12 @@
+[
+  "Benign",
+  "Botnet",
+  "DDoS",
+  "FTP-Patator",
+  "GoldenEye",
+  "Hulk",
+  "PortScan",
+  "SSH-Patator",
+  "Slowhttptest",
+  "Slowloris"
+]

@@ -1,0 +1,303 @@
+# Alerting Pipeline Configuration
+# Maps attack classes to severity levels, defines thresholds, and configures integrations
+
+# ============================================================================
+# Severity Mapping
+# ============================================================================
+# Maps attack class names to severity levels
+# Severity levels: INFO, LOW, MEDIUM, HIGH, CRITICAL
+severity_mapping:
+  # Normal traffic - informational only
+  BENIGN: INFO
+  Normal: INFO
+
+  # Reconnaissance & scanning - low severity
+  PortScan: LOW
+  Port Scan: LOW
+  Portscan: LOW
+  Nmap: LOW
+
+  # DoS attacks - medium to high severity based on confidence
+  DoS Hulk: MEDIUM
+  DoS GoldenEye: MEDIUM
+  DoS slowloris: MEDIUM
+  DoS Slowhttptest: MEDIUM
+  DoS slowhttptest: MEDIUM
+  Dos Hulk: MEDIUM
+
+  # DDoS attacks - high severity (distributed, larger impact)
+  DDoS: HIGH
+  DDOS: HIGH
+  DDoS attack: HIGH
+  Ddos: HIGH
+
+  # Web attacks - medium severity
+  Web Attack – Brute Force: MEDIUM
+  Web Attack Brute Force: MEDIUM
+  Web Attack – XSS: MEDIUM
+  Web Attack XSS: MEDIUM
+  Web Attack – Sql Injection: MEDIUM
+  Web Attack Sql Injection: MEDIUM
+  SQL Injection: MEDIUM
+  XSS: MEDIUM
+
+  # Infiltration - critical severity (system compromise)
+  Infiltration: CRITICAL
+  Infilteration: CRITICAL
+  Infiltration Attack: CRITICAL
+
+  # Botnet activity - high severity
+  Bot: HIGH
+  Botnet: HIGH
+  Botnet ARES: HIGH
+
+  # Brute force attacks - medium to high
+  FTP-Patator: MEDIUM
+  SSH-Patator: MEDIUM
+  Brute Force: MEDIUM
+  Brute Force -Web: MEDIUM
+  Brute Force -XSS: MEDIUM
+
+  # Heartbleed - critical (data exfiltration)
+  Heartbleed: CRITICAL
+
+  # Default for unknown classes
+  _default: MEDIUM
+
+# ============================================================================
+# Confidence Thresholds
+# ============================================================================
+# Minimum confidence required to generate an alert at each severity level
+# TEMPORARY: Lowered for testing with untrained model
+confidence_thresholds:
+  INFO: 0.0 # Always alert for informational (if enabled)
+  LOW: 0.05 # 5% confidence minimum (TESTING ONLY)
+  MEDIUM: 0.05 # 5% confidence minimum (TESTING ONLY)
+  HIGH: 0.05 # 5% confidence minimum (TESTING ONLY)
+  CRITICAL: 0.05 # 5% confidence minimum (TESTING ONLY)
+
+# Confidence boost based on severity (multiplicative)
+# Used to promote alerts when confidence is borderline
+confidence_boost:
+  enabled: true
+  boost_factors:
+    CRITICAL: 1.1 # 10% boost for critical alerts
+    HIGH: 1.05 # 5% boost for high severity
+    MEDIUM: 1.0 # No boost
+    LOW: 1.0 # No boost
+    INFO: 1.0 # No boost
+
+# ============================================================================
+# Alert Filtering
+# ============================================================================
+alert_filtering:
+  # Suppress INFO-level alerts by default (too noisy)
+  suppress_info: true
+
+  # Suppress alerts for specific class names
+  suppress_classes:
+    - BENIGN
+    - Normal
+
+  # Minimum confidence for any alert (global threshold)
+  # TEMPORARY: Lowered for testing with untrained model
+  min_confidence: 0.05
+
+  # Deduplicate alerts within time window (seconds)
+  deduplication_window: 300 # 5 minutes
+  deduplication_keys:
+    - src_ip
+    - dst_ip
+    - class_name
+
+# ============================================================================
+# Rate Limiting
+# ============================================================================
+rate_limiting:
+  # Global rate limits (alerts per minute)
+  global:
+    enabled: true
+    max_alerts_per_minute: 100
+
+  # Per-severity rate limits
+  per_severity:
+    INFO: 10
+    LOW: 20
+    MEDIUM: 30
+    HIGH: 50
+    CRITICAL: 100 # Never rate-limit critical
+
+  # Per-destination rate limits
+  per_destination:
+    email:
+      max_per_minute: 5
+      max_per_hour: 20
+      max_per_day: 100
+    syslog:
+      max_per_minute: 100
+      max_per_hour: 5000
+    siem:
+      max_per_minute: 100
+      max_per_hour: 10000
+
+# ============================================================================
+# Integration Configuration
+# ============================================================================
+integrations:
+  # Database persistence (always enabled)
+  database:
+    enabled: true
+    batch_size: 10
+    batch_timeout_ms: 500
+
+  # Syslog (RFC5424 over TLS) - DISABLED
+  # syslog:
+  #   enabled: false
+  #   min_severity: MEDIUM
+
+  # Email notifications - ENABLED (only active integration)
+  email:
+    enabled: ${EMAIL_ENABLED:false}
+    smtp_host: ${SMTP_HOST:localhost}
+    smtp_port: ${SMTP_PORT:587}
+    smtp_tls: ${SMTP_TLS:true}
+    smtp_user: ${SMTP_USER:}
+    smtp_password: ${SMTP_PASSWORD:}
+
+    from_address: ${EMAIL_FROM:}
+    to_addresses: ${EMAIL_TO:}
+    cc_addresses: ${EMAIL_CC:}
+
+    # Subject template
+    subject_template: "[{severity}] IDS Alert: {class_name} detected from {src_ip}"
+
+    # Only email high-severity alerts
+    min_severity: HIGH
+
+    # Rate limiting (applied on top of global rate limits)
+    rate_limit:
+      enabled: true
+      max_per_hour: 100
+      max_per_day: 500
+
+  # All other integrations are disabled
+  # Splunk HEC - DISABLED
+  # splunk:
+  #   enabled: false
+
+  # QRadar SIEM - DISABLED
+  # qradar:
+  #   enabled: false
+
+  # Elastic SIEM - DISABLED
+  # elastic:
+  #   enabled: false
+
+  # Graylog SIEM - DISABLED
+  # graylog:
+  #   enabled: false
+
+  # Generic webhook (for custom integrations)
+  webhook:
+    enabled: ${WEBHOOK_ENABLED:false}
+    url: ${WEBHOOK_URL:}
+    method: POST
+    headers:
+      Content-Type: application/json
+      Authorization: ${WEBHOOK_AUTH:}
+
+    timeout_ms: 5000
+    max_retries: 3
+
+    min_severity: MEDIUM
+
+# ============================================================================
+# Dead Letter Queue (DLQ)
+# ============================================================================
+dlq:
+  enabled: true
+  topic: alerts.dlq
+
+  # Retry policy for failed deliveries
+  retry:
+    max_attempts: 3
+    initial_delay_ms: 1000
+    max_delay_ms: 60000
+    backoff_multiplier: 2.0
+
+  # What to write to DLQ
+  include_original_message: true
+  include_error_details: true
+  include_retry_count: true
+
+# ============================================================================
+# Enrichment (optional)
+# ============================================================================
+enrichment:
+  # GeoIP lookup
+  geoip:
+    enabled: false
+    database_path: ${GEOIP_DB_PATH:/usr/share/GeoIP/GeoLite2-Country.mmdb}
+
+  # IP reputation (threat intelligence)
+  reputation:
+    enabled: false
+    cache_ttl_seconds: 3600
+    providers:
+      - abuseipdb
+      - virustotal
+
+  # Custom tagging
+  tagging:
+    enabled: true
+    rules:
+      # Tag internal IPs
+      - condition: src_ip matches 10\\..*|172\\.(1[6-9]|2[0-9]|3[0-1])\\..*|192\\.168\\..*
+        tags: [internal, rfc1918]
+      # Tag DMZ
+      - condition: src_ip matches 192\\.168\\.100\\..*
+        tags: [dmz]
+
+# ============================================================================
+# Logging & Metrics
+# ============================================================================
+logging:
+  level: INFO # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: json # json or text
+
+  # Log all alerts to file
+  alert_log:
+    enabled: true
+    path: ${ALERT_LOG_PATH:/var/log/adaptive-ids/alerts.log}
+    rotation: daily
+    retention_days: 30
+
+metrics:
+  enabled: true
+  prometheus:
+    enabled: true
+    port: 9090
+
+  # Custom metrics
+  track_latency: true
+  track_throughput: true
+  track_delivery_status: true
+
+# ============================================================================
+# Performance Tuning
+# ============================================================================
+performance:
+  # Kafka consumer
+  consumer:
+    batch_size: 100
+    batch_timeout_ms: 100
+    prefetch_count: 500
+
+  # Database
+  database:
+    connection_pool_size: 10
+    max_overflow: 20
+
+  # Threading
+  worker_threads: 4
+  io_threads: 2

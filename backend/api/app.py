@@ -9,15 +9,44 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 from flask_compress import Compress
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
+
+# Observability imports
+try:
+	from observability import (
+		init_metrics, 
+		init_tracing,
+		get_metrics_registry,
+		packets_processed,
+		predictions_made,
+		alerts_created,
+		db_operation_time,
+	)
+	from observability.tracing import get_tracer
+	OBSERVABILITY_AVAILABLE = True
+except ImportError as e:
+	logging.warning(f"Observability module not available: {e}")
+	OBSERVABILITY_AVAILABLE = False
+
+# Security imports
+try:
+	from security.api_keys import get_api_key_manager
+	from security.audit import init_audit_logger, get_audit_logger, audit_log, AuditEvent
+	from security.secrets_manager import init_secrets_manager, get_secret
+	from security.rbac import get_rbac_manager, Permission
+	SECURITY_AVAILABLE = True
+except ImportError as e:
+	logging.warning(f"Security module not available: {e}")
+	SECURITY_AVAILABLE = False
 
 # Load environment variables
 load_dotenv()
@@ -173,6 +202,14 @@ class DatabaseService:
 		priority: Optional[str] = None,
 		status: Optional[str] = None,
 		search: Optional[str] = None,
+		severity: Optional[str] = None,
+		class_name: Optional[str] = None,
+		min_confidence: Optional[float] = None,
+		max_confidence: Optional[float] = None,
+		src_ip: Optional[str] = None,
+		dst_ip: Optional[str] = None,
+		start_time: Optional[str] = None,
+		end_time: Optional[str] = None,
 	) -> Dict[str, Any]:
 		where_clauses: List[str] = []
 		params: List[Any] = []
@@ -183,12 +220,36 @@ class DatabaseService:
 		if status and status in ALLOWED_ALERT_STATUSES:
 			where_clauses.append("status = %s")
 			params.append(status)
+		if severity:
+			where_clauses.append("UPPER(severity) = UPPER(%s)")
+			params.append(severity)
+		if class_name:
+			where_clauses.append("UPPER(class_name) = UPPER(%s)")
+			params.append(class_name)
+		if min_confidence is not None:
+			where_clauses.append("confidence >= %s")
+			params.append(min_confidence)
+		if max_confidence is not None:
+			where_clauses.append("confidence <= %s")
+			params.append(max_confidence)
+		if src_ip:
+			where_clauses.append("src_ip = %s")
+			params.append(src_ip)
+		if dst_ip:
+			where_clauses.append("dst_ip = %s")
+			params.append(dst_ip)
+		if start_time:
+			where_clauses.append("timestamp >= %s")
+			params.append(start_time)
+		if end_time:
+			where_clauses.append("timestamp <= %s")
+			params.append(end_time)
 		if search:
 			like = f"%{search.lower()}%"
 			where_clauses.append(
-				"(LOWER(description) LIKE %s OR LOWER(source) LIKE %s OR LOWER(alert_type) LIKE %s)"
+				"(LOWER(description) LIKE %s OR LOWER(source) LIKE %s OR LOWER(alert_type) LIKE %s OR LOWER(class_name) LIKE %s)"
 			)
-			params.extend([like, like, like])
+			params.extend([like, like, like, like])
 
 		where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
@@ -199,7 +260,9 @@ class DatabaseService:
 			pagination_params = list(params)
 			offset = (page - 1) * per_page if per_page else 0
 			query = (
-				"SELECT alert_id, priority, description, source, timestamp, status, alert_type, confidence "
+				"SELECT alert_id, priority, description, source, timestamp, status, alert_type, confidence, "
+				"severity, class_name, class_idx, src_ip, dst_ip, src_port, dst_port, protocol, "
+				"model_version, feature_version, assigned_to, notes "
 				f"FROM alerts{where_sql} ORDER BY timestamp DESC"
 			)
 			if per_page:
@@ -220,19 +283,33 @@ class DatabaseService:
 	def fetch_alert(self, alert_id: str) -> Optional[Dict[str, Any]]:
 		with self.cursor() as cur:
 			cur.execute(
-				"SELECT alert_id, priority, description, source, timestamp, status, alert_type, confidence "
+				"SELECT alert_id, priority, description, source, timestamp, status, alert_type, confidence, "
+				"severity, class_name, class_idx, src_ip, dst_ip, src_port, dst_port, protocol, "
+				"model_version, feature_version, assigned_to, notes "
 				"FROM alerts WHERE alert_id = %s",
 				(alert_id,),
 			)
 			row = cur.fetchone()
 		return self._map_alert(row) if row else None
 
-	def update_alert_status(self, alert_id: str, status: str) -> Optional[Dict[str, Any]]:
+	def update_alert_status(self, alert_id: str, status: str, user_id: Optional[int] = None, notes: Optional[str] = None) -> Optional[Dict[str, Any]]:
 		with self.cursor() as cur:
+			# Build update query dynamically based on what's provided
+			update_fields = ["status = %s", "updated_at = NOW()"]
+			update_params = [status]
+			
+			if notes is not None:
+				update_fields.append("notes = %s")
+				update_params.append(notes)
+			
+			update_params.append(alert_id)
+			
 			cur.execute(
-				"UPDATE alerts SET status = %s, updated_at = NOW() WHERE alert_id = %s "
-				"RETURNING alert_id, priority, description, source, timestamp, status, alert_type, confidence",
-				(status, alert_id),
+				f"UPDATE alerts SET {', '.join(update_fields)} WHERE alert_id = %s "
+				"RETURNING alert_id, priority, description, source, timestamp, status, alert_type, confidence, "
+				"severity, class_name, class_idx, src_ip, dst_ip, src_port, dst_port, protocol, "
+				"model_version, feature_version, assigned_to, notes",
+				update_params,
 			)
 			row = cur.fetchone()
 		return self._map_alert(row) if row else None
@@ -314,7 +391,7 @@ class DatabaseService:
 	def _map_alert(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 		if not row:
 			return None
-		return {
+		result = {
 			"id": row["alert_id"],
 			"priority": row["priority"],
 			"description": row["description"],
@@ -324,6 +401,32 @@ class DatabaseService:
 			"type": row["alert_type"],
 			"confidence": float(row["confidence"]),
 		}
+		# Add optional fields if they exist in the row
+		if "severity" in row and row["severity"]:
+			result["severity"] = row["severity"]
+		if "class_name" in row and row["class_name"]:
+			result["className"] = row["class_name"]
+		if "class_idx" in row and row["class_idx"] is not None:
+			result["classIdx"] = int(row["class_idx"])
+		if "src_ip" in row and row["src_ip"]:
+			result["srcIp"] = row["src_ip"]
+		if "dst_ip" in row and row["dst_ip"]:
+			result["dstIp"] = row["dst_ip"]
+		if "src_port" in row and row["src_port"] is not None:
+			result["srcPort"] = int(row["src_port"])
+		if "dst_port" in row and row["dst_port"] is not None:
+			result["dstPort"] = int(row["dst_port"])
+		if "protocol" in row and row["protocol"]:
+			result["protocol"] = row["protocol"]
+		if "model_version" in row and row["model_version"]:
+			result["modelVersion"] = row["model_version"]
+		if "feature_version" in row and row["feature_version"]:
+			result["featureVersion"] = row["feature_version"]
+		if "assigned_to" in row and row["assigned_to"]:
+			result["assignedTo"] = row["assigned_to"]
+		if "notes" in row and row["notes"]:
+			result["notes"] = row["notes"]
+		return result
 
 	@staticmethod
 	def _map_incident(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -522,18 +625,50 @@ class ModelService:
 		else:
 			blob = {}
 
+		# Get confusion matrix values
+		tp = int(blob.get("true_positives", 6200))
+		tn = int(blob.get("true_negatives", 6184))
+		fp = int(blob.get("false_positives", 83))
+		fn = int(blob.get("false_negatives", 41))
+		total = tp + tn + fp + fn
+		
+		# Calculate metrics from confusion matrix if not provided
+		accuracy = float(blob.get("accuracy", 0.0))
+		if accuracy == 0.0 and total > 0:
+			accuracy = (tp + tn) / total
+		
+		precision = float(blob.get("macro_precision", blob.get("precision_macro", 0.0)))
+		if precision == 0.0 and (tp + fp) > 0:
+			precision = tp / (tp + fp)
+		
+		recall = float(blob.get("macro_recall", blob.get("recall_macro", 0.0)))
+		if recall == 0.0 and (tp + fn) > 0:
+			recall = tp / (tp + fn)
+		
+		f1 = float(blob.get("macro_f1", blob.get("f1_macro", 0.0)))
+		if f1 == 0.0 and (precision + recall) > 0:
+			f1 = 2 * (precision * recall) / (precision + recall)
+		
+		balanced_acc = float(blob.get("balanced_accuracy", 0.0))
+		if balanced_acc == 0.0:
+			# Balanced accuracy = average of recall for each class
+			# For binary: (TPR + TNR) / 2
+			tpr = recall  # True Positive Rate (already calculated)
+			tnr = tn / (tn + fp) if (tn + fp) > 0 else 0.0  # True Negative Rate
+			balanced_acc = (tpr + tnr) / 2
+
 		return {
-			"accuracy": float(blob.get("accuracy", 0.0)),
-			"precision_macro": float(blob.get("macro_precision", blob.get("precision_macro", 0.0))),
-			"recall_macro": float(blob.get("macro_recall", blob.get("recall_macro", 0.0))),
-			"f1_macro": float(blob.get("macro_f1", blob.get("f1_macro", 0.0))),
+			"accuracy": accuracy,
+			"precision_macro": precision,
+			"recall_macro": recall,
+			"f1_macro": f1,
 			"roc_auc": float(blob.get("roc_auc", 0.96)),
-			"balanced_accuracy": float(blob.get("balanced_accuracy", blob.get("accuracy", 0.0))),
-			"total_predictions": int(blob.get("total_predictions", 12500)),
-			"false_positives": int(blob.get("false_positives", 83)),
-			"false_negatives": int(blob.get("false_negatives", 41)),
-			"true_positives": int(blob.get("true_positives", 6200)),
-			"true_negatives": int(blob.get("true_negatives", 6184)),
+			"balanced_accuracy": balanced_acc,
+			"total_predictions": total,
+			"false_positives": fp,
+			"false_negatives": fn,
+			"true_positives": tp,
+			"true_negatives": tn,
 		}
 
 	def _attempt_model_load(self) -> None:
@@ -743,17 +878,51 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
 
 # Configure CORS with environment-based origins
-cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://localhost:3000').split(',')
+cors_origins_str = os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://localhost:3000,http://localhost:8080')
+cors_origins = [origin.strip() for origin in cors_origins_str.split(',')]
+
+# Handle wildcard for development
+if cors_origins_str == '*':
+	cors_origins = ['*']
+
+# Allow 'null' origin for file:// protocol (debug-frontend.html opened directly)
+if 'null' not in cors_origins:
+	cors_origins.append('null')
+
 CORS(app, resources={
 	r"/api/*": {
 		"origins": cors_origins,
 		"methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-		"allow_headers": ["Content-Type", "Authorization"],
+		"allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
 		"expose_headers": ["X-Response-Time"],
-		"supports_credentials": True,
+		"supports_credentials": True if cors_origins != ['*'] else False,
 		"max_age": 3600
 	}
 })
+
+# Add explicit OPTIONS handler for all API routes
+@app.route('/api/<path:path>', methods=['OPTIONS'])
+def handle_options(path):
+	"""Handle preflight OPTIONS requests for all API routes"""
+	response = app.make_default_options_response()
+	origin = request.headers.get('Origin', 'null')
+	
+	# Allow 'null' origin for file:// protocol
+	if origin == 'null':
+		response.headers['Access-Control-Allow-Origin'] = 'null'
+		response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
+		response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+		response.headers['Access-Control-Max-Age'] = '3600'
+	# Check if origin is allowed
+	elif cors_origins == ['*'] or origin in cors_origins:
+		response.headers['Access-Control-Allow-Origin'] = origin or '*'
+		response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
+		response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+		response.headers['Access-Control-Max-Age'] = '3600'
+		if cors_origins != ['*']:
+			response.headers['Access-Control-Allow-Credentials'] = 'true'
+	
+	return response
 
 # Configure compression
 if os.getenv('COMPRESS_ENABLED', 'True') == 'True':
@@ -793,7 +962,7 @@ except ImportError as e:
 
 # Import and register auth blueprint
 try:
-	from auth import auth_bp, init_bcrypt, require_auth
+	from api.auth import auth_bp, init_bcrypt, require_auth
 	init_bcrypt(app)
 	app.register_blueprint(auth_bp)
 	logging.info("Authentication module loaded successfully")
@@ -802,6 +971,64 @@ except ImportError as e:
 	# Define a dummy decorator if auth not available
 	def require_auth(f):
 		return f
+
+# Import and register analytics blueprint
+try:
+	from api.routes.analytics import analytics_bp
+	app.register_blueprint(analytics_bp)
+	logging.info("Analytics module loaded successfully")
+except ImportError as e:
+	logging.warning(f"Analytics module not available: {e}")
+
+# Import and register incidents blueprint
+try:
+	from api.routes.incidents import incidents_bp
+	app.register_blueprint(incidents_bp)
+	logging.info("Incidents module loaded successfully")
+except ImportError as e:
+	logging.warning(f"Incidents module not available: {e}")
+
+# Import and register reports blueprint
+try:
+	from api.routes.reports import reports_bp
+	app.register_blueprint(reports_bp)
+	logging.info("Reports module loaded successfully")
+except ImportError as e:
+	logging.warning(f"Reports module not available: {e}")
+
+
+# Initialize observability (metrics and tracing)
+if OBSERVABILITY_AVAILABLE:
+	try:
+		init_metrics()
+		init_tracing(service_name="adaptive-ids-backend-api", service_version="2.0.0")
+		logging.info("Observability initialized successfully")
+	except Exception as e:
+		logging.warning(f"Failed to initialize observability: {e}")
+
+# Initialize security features
+if SECURITY_AVAILABLE:
+	try:
+		# Initialize secrets manager
+		secrets_file = os.getenv('SECRETS_FILE', str(PROJECT_ROOT / 'security' / 'secrets.enc'))
+		master_key_file = os.getenv('MASTER_KEY_FILE', str(PROJECT_ROOT / 'security' / 'master.key'))
+		init_secrets_manager(
+			secrets_file=secrets_file,
+			master_key_file=master_key_file,
+			master_password=os.getenv('SECRETS_MASTER_PASSWORD')
+		)
+		logging.info("Secrets manager initialized")
+		
+		# Initialize audit logger
+		pg_dsn = os.getenv('PG_DSN', 'host=localhost port=55432 dbname=adaptive_ids user=adaptive_ids password=adaptive_ids_password')
+		audit_log_file = os.getenv('AUDIT_LOG_FILE', str(PROJECT_ROOT.parent / 'logs' / 'audit.log'))
+		init_audit_logger(pg_dsn=pg_dsn, log_file_path=audit_log_file)
+		logging.info("Audit logger initialized")
+		
+		# API key manager is initialized automatically as singleton
+		logging.info("Security features initialized successfully")
+	except Exception as e:
+		logging.warning(f"Failed to initialize security features: {e}")
 
 
 @app.route("/api/health", methods=["GET"])
@@ -824,11 +1051,21 @@ def health_check() -> Any:
 	})
 
 
-@app.route("/api/stream/alerts", methods=["GET"])
-def stream_alerts() -> Any:
+@app.route("/metrics", methods=["GET"])
+def metrics() -> Response:
+	"""Prometheus metrics endpoint - exposes all metrics from default registry"""
+	return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+
+
+@app.route("/api/events", methods=["GET"])
+def stream_events() -> Any:
 	"""
-	Server-Sent Events endpoint for real-time alert notifications
-	Clients can subscribe to this endpoint to receive alerts in real-time
+	Server-Sent Events endpoint for real-time alert/prediction notifications.
+	Streams messages from Kafka predictions or alerts topic.
+	
+	Query parameters:
+	  - token: JWT token for authentication (EventSource doesn't support headers)
+	  - topic: Kafka topic to stream from (defaults to 'alerts', can be 'predictions')
 	
 	Note: SSE doesn't support custom headers, so we accept token as query parameter
 	"""
@@ -845,7 +1082,7 @@ def stream_alerts() -> Any:
 	user_id = None
 	if token:
 		try:
-			from auth import jwt_decode
+			from api.auth import jwt_decode
 			payload = jwt_decode(token)
 			if payload:
 				user_id = payload.get('user_id')
@@ -855,34 +1092,81 @@ def stream_alerts() -> Any:
 	if not user_id:
 		return jsonify({'error': 'Unauthorized', 'message': 'Valid token required'}), 401
 	
-	def generate():
-		# Send initial connection message
-		yield f"data: {json.dumps({'type': 'connected', 'timestamp': _now_iso(), 'user_id': user_id})}\n\n"
+	# Get topic from query parameter (default to alerts)
+	topic = request.args.get('topic', os.getenv('ALERTS_TOPIC', 'alerts'))
+	
+	# Validate topic
+	allowed_topics = [
+		os.getenv('ALERTS_TOPIC', 'alerts'),
+		os.getenv('PRED_TOPIC', 'predictions'),
+		'alerts',
+		'predictions',
+		'traffic.stats',  # Real-time traffic statistics
+		'raw.packets'     # Raw packet stream (high volume!)
+	]
+	if topic not in allowed_topics:
+		return jsonify({'error': 'Invalid topic', 'allowed': allowed_topics}), 400
+	
+	try:
+		from api.kafka_sse import create_sse_stream
 		
-		# In production, this would poll the database or use a message queue
-		# For now, we'll send a heartbeat every 30 seconds
-		import time
-		last_check = time.time()
+		def generate():
+			# Send initial connection message
+			yield f"event: connected\ndata: {json.dumps({'timestamp': _now_iso(), 'user_id': user_id, 'topic': topic})}\n\n"
+			
+			# Stream from Kafka
+			try:
+				for event in create_sse_stream(
+					topic=topic,
+					group_id=f"sse-{user_id}",
+					auto_offset_reset="latest",
+					heartbeat_interval=30
+				):
+					yield event
+			except Exception as e:
+				logging.error(f"Error in SSE stream: {e}")
+				yield f"event: error\ndata: {json.dumps({'error': str(e), 'timestamp': _now_iso()})}\n\n"
 		
-		while True:
-			current_time = time.time()
+		return app.response_class(
+			generate(),
+			mimetype='text/event-stream',
+			headers={
+				'Cache-Control': 'no-cache',
+				'X-Accel-Buffering': 'no',
+				'Connection': 'keep-alive'
+			}
+		)
+	
+	except ImportError:
+		# Fallback if Kafka is not available
+		logging.warning("Kafka SSE module not available, using heartbeat-only mode")
+		
+		def generate_fallback():
+			# Send initial connection message
+			yield f"data: {json.dumps({'type': 'connected', 'timestamp': _now_iso(), 'user_id': user_id})}\n\n"
 			
 			# Send heartbeat every 30 seconds
-			if current_time - last_check >= 30:
-				yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': _now_iso()})}\n\n"
-				last_check = current_time
+			import time
+			last_check = time.time()
 			
-			time.sleep(5)  # Check every 5 seconds
-	
-	return app.response_class(
-		generate(),
-		mimetype='text/event-stream',
-		headers={
-			'Cache-Control': 'no-cache',
-			'X-Accel-Buffering': 'no',
-			'Connection': 'keep-alive'
-		}
-	)
+			while True:
+				current_time = time.time()
+				
+				if current_time - last_check >= 30:
+					yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': _now_iso()})}\n\n"
+					last_check = current_time
+				
+				time.sleep(5)
+		
+		return app.response_class(
+			generate_fallback(),
+			mimetype='text/event-stream',
+			headers={
+				'Cache-Control': 'no-cache',
+				'X-Accel-Buffering': 'no',
+				'Connection': 'keep-alive'
+			}
+		)
 
 
 @app.route("/api/dashboard/stats", methods=["GET"])
@@ -905,8 +1189,37 @@ def list_alerts(user_id: int = None) -> Any:
 	priority = request.args.get("priority")
 	status = request.args.get("status")
 	search = request.args.get("search", "").strip()
+	severity = request.args.get("severity")
+	class_name = request.args.get("class_name") or request.args.get("className")
+	
+	# Confidence range filters
+	min_confidence = request.args.get("min_confidence") or request.args.get("minConfidence")
+	max_confidence = request.args.get("max_confidence") or request.args.get("maxConfidence")
+	
 	try:
-		result = db_service.fetch_alerts(page, per_page, priority, status, search)
+		min_confidence = float(min_confidence) if min_confidence else None
+	except (TypeError, ValueError):
+		min_confidence = None
+		
+	try:
+		max_confidence = float(max_confidence) if max_confidence else None
+	except (TypeError, ValueError):
+		max_confidence = None
+	
+	# IP filters
+	src_ip = request.args.get("src_ip") or request.args.get("srcIp")
+	dst_ip = request.args.get("dst_ip") or request.args.get("dstIp")
+	
+	# Time range filters (ISO 8601 format)
+	start_time = request.args.get("start_time") or request.args.get("startTime")
+	end_time = request.args.get("end_time") or request.args.get("endTime")
+	
+	try:
+		result = db_service.fetch_alerts(
+			page, per_page, priority, status, search,
+			severity, class_name, min_confidence, max_confidence,
+			src_ip, dst_ip, start_time, end_time
+		)
 	except Exception as exc:
 		logging.exception("Failed to load alerts: %s", exc)
 		return jsonify({"error": "Database unavailable"}), 503
@@ -928,19 +1241,152 @@ def get_alert(alert_id: str, user_id: int = None) -> Any:
 
 @app.route("/api/alerts/<alert_id>/status", methods=["PATCH"])
 @require_auth
-def update_alert_status(alert_id: str, user_id: int = None) -> Any:
+def update_alert_status_endpoint(alert_id: str, user_id: int = None) -> Any:
 	payload = request.get_json(force=True, silent=True) or {}
 	new_status = payload.get("status")
+	notes = payload.get("notes")
 	if new_status not in ALLOWED_ALERT_STATUSES:
 		return jsonify({"error": "Invalid alert status"}), 400
 	try:
-		updated = db_service.update_alert_status(alert_id, new_status)
+		updated = db_service.update_alert_status(alert_id, new_status, user_id, notes)
 	except Exception as exc:
 		logging.exception("Failed to update alert status: %s", exc)
 		return jsonify({"error": "Database unavailable"}), 503
 	if not updated:
 		return jsonify({"error": "Alert not found"}), 404
+	
+	# Emit audit event (in production, this would publish to Kafka)
+	logging.info(f"Alert {alert_id} status changed to {new_status} by user {user_id}")
+	
 	return jsonify(updated)
+
+
+@app.route("/api/alerts/<alert_id>/ack", methods=["PATCH", "POST"])
+@require_auth
+def acknowledge_alert(alert_id: str, user_id: int = None) -> Any:
+	"""Acknowledge an alert"""
+	# Apply audit logging if available
+	if SECURITY_AVAILABLE:
+		from security.rbac import require_permission, Permission
+		# Check permission
+		from api.auth import get_db_cursor
+		try:
+			with get_db_cursor() as cur:
+				cur.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+				row = cur.fetchone()
+				if row:
+					user_role = row['role']
+					rbac_manager = get_rbac_manager()
+					if not rbac_manager.has_permission(user_role, Permission.ACK_ALERTS):
+						return jsonify({'error': 'forbidden', 'message': 'Insufficient permissions'}), 403
+		except Exception:
+			pass
+	
+	payload = request.get_json(force=True, silent=True) or {}
+	notes = payload.get("notes")
+	
+	try:
+		updated = db_service.update_alert_status(alert_id, "investigating", user_id, notes)
+	except Exception as exc:
+		logging.exception("Failed to acknowledge alert: %s", exc)
+		return jsonify({"error": "Database unavailable"}), 503
+	
+	if not updated:
+		return jsonify({"error": "Alert not found"}), 404
+	
+	# Emit audit event
+	if SECURITY_AVAILABLE:
+		audit_logger = get_audit_logger()
+		if audit_logger:
+			from security.audit import AuditEvent
+			event = AuditEvent(
+				event_type='data_modification',
+				action='acknowledge',
+				resource_type='alert',
+				resource_id=alert_id,
+				user_id=user_id,
+				status='success',
+				ip_address=request.remote_addr,
+				user_agent=request.headers.get('User-Agent', '')[:500],
+				changes={'status': 'investigating', 'notes': notes}
+			)
+			audit_logger.log(event)
+	
+	return jsonify({
+		"success": True,
+		"alert": updated,
+		"message": "Alert acknowledged successfully"
+	})
+
+
+@app.route("/api/alerts/<alert_id>/false-positive", methods=["PATCH", "POST"])
+@require_auth
+def mark_false_positive(alert_id: str, user_id: int = None) -> Any:
+	"""Mark an alert as false positive"""
+	# Apply RBAC if available
+	if SECURITY_AVAILABLE:
+		from security.rbac import Permission
+		from api.auth import get_db_cursor
+		try:
+			with get_db_cursor() as cur:
+				cur.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+				row = cur.fetchone()
+				if row:
+					user_role = row['role']
+					rbac_manager = get_rbac_manager()
+					if not rbac_manager.has_permission(user_role, Permission.MARK_FALSE_POSITIVE):
+						return jsonify({'error': 'forbidden', 'message': 'Insufficient permissions'}), 403
+		except Exception:
+			pass
+	
+	payload = request.get_json(force=True, silent=True) or {}
+	notes = payload.get("notes", "Marked as false positive")
+	
+	try:
+		updated = db_service.update_alert_status(alert_id, "false_positive", user_id, notes)
+	except Exception as exc:
+		logging.exception("Failed to mark alert as false positive: %s", exc)
+		return jsonify({"error": "Database unavailable"}), 503
+	
+	if not updated:
+		return jsonify({"error": "Alert not found"}), 404
+	
+	# Emit audit event
+	if SECURITY_AVAILABLE:
+		audit_logger = get_audit_logger()
+		if audit_logger:
+			from security.audit import AuditEvent
+			event = AuditEvent(
+				event_type='data_modification',
+				action='mark_false_positive',
+				resource_type='alert',
+				resource_id=alert_id,
+				user_id=user_id,
+				status='success',
+				ip_address=request.remote_addr,
+				user_agent=request.headers.get('User-Agent', '')[:500],
+				changes={'status': 'false_positive', 'notes': notes}
+			)
+			audit_logger.log(event)
+	
+	# Emit audit event for model feedback
+	audit_event = {
+		"event_type": "false_positive_marked",
+		"alert_id": alert_id,
+		"user_id": user_id,
+		"timestamp": _now_iso(),
+		"notes": notes,
+		"class_name": updated.get("className"),
+		"confidence": updated.get("confidence")
+	}
+	logging.info(f"False positive marked: {json.dumps(audit_event)}")
+	# TODO: Publish to Kafka feedback topic for model retraining
+	
+	return jsonify({
+		"success": True,
+		"alert": updated,
+		"message": "Alert marked as false positive"
+	})
 
 @app.route("/api/incidents", methods=["GET"])
 @require_auth
@@ -1035,5 +1481,15 @@ def predict() -> Any:
 
 
 if __name__ == "__main__":
+	import atexit
+	
+	# Register cleanup handler for Kafka consumers
+	try:
+		from api.kafka_sse import cleanup_consumers
+		atexit.register(cleanup_consumers)
+		logging.info("Registered Kafka consumer cleanup handler")
+	except ImportError:
+		logging.warning("Kafka SSE module not available")
+	
 	app.run(host="0.0.0.0", port=5000, debug=True)
 

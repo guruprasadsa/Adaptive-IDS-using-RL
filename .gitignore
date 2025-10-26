@@ -28,10 +28,13 @@ ENV/
 env/
 .virtualenv/
 
-# Environment Variables
+# Environment Variables (NEVER commit these!)
 .env
 .env.local
 .env.*.local
+backend/.env
+frontend/.env
+frontend/.env.local
 
 # IDEs
 .vscode/
@@ -47,13 +50,15 @@ env/
 # PyCharm
 .idea/
 
-# Logs
+# Logs (NEVER commit sensitive logs!)
 logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+backend/logs/
+backend/**/*.log
 
 # Backend Specific
 backend/model/cache/*.npy
@@ -83,10 +88,26 @@ db.sqlite3
 Thumbs.db
 desktop.ini
 
-# Personal Notes
+# Personal Notes and Development Artifacts
 personal_note.txt
 notes.txt
 TODO.txt
+prompts.txt
+*.bak.md
+test-*.ps1
+test-*.bat
+test-*.html
+debug-*.html
+quick-test.*
+login-and-test.*
+check-system.*
+create-test-user.*
+create-test-users.*
+update-admin.py
+demo_*.py
+monitor_*.py
+start-*.bat
+metrics_output.txt
 
 # Large Dataset Files (optional - uncomment if datasets are too large)
 # data/2017/*.csv
@@ -123,3 +144,45 @@ tmp/
 
 #datset
 *.csv
+
+# Stream processing state
+backend/stream/state/
+
+# Sensor captures (optional - don't commit large pcap files)
+backend/sensors/*.pcap
+backend/sensors/*.pcapng
+
+# Model service temporary files
+backend/model/service/tmp/
+
+# Alerting queue/state
+backend/alerting/queue/
+backend/alerting/state/
+
+# VS Code workspace settings (optional, adjust as needed)
+.vscode/settings.local.json
+
+# Security & Secrets (CRITICAL - NEVER commit!)
+backend/master.key
+backend/security/secrets.enc
+backend/security/certs/*.pem
+backend/security/certs/*.key
+backend/security/certs/*.crt
+*.pem
+*.key
+*.crt
+
+# Documentation - Development Notes (move to documentation/dev-notes/)
+FRONTEND_CONNECTION_FIXES.md
+FRONTEND_PRODUCTION_READY.md
+FRONTEND_QUICKSTART.md
+FRONTEND_READY.md
+FRONTEND_TODO_TRACKER.md
+METRICS_FIX.md
+NEXT_STEPS.md
+REALTIME_FRONTEND_FIX.md
+TEST_REALTIME_FRONTEND.md
+TRAFFIC_CHART_FIX.md
+ANALYTICS_COMPLETE.md
+ANALYTICS_REPORTS_IMPLEMENTATION.md
+START_HERE.md

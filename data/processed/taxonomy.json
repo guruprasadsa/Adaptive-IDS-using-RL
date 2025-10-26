@@ -1,0 +1,161 @@
+{
+  "classes": [
+    "Benign",
+    "Botnet",
+    "DDoS",
+    "FTP-Patator",
+    "GoldenEye",
+    "Hulk",
+    "PortScan",
+    "SSH-Patator",
+    "Slowhttptest",
+    "Slowloris"
+  ],
+  "num_classes": 10,
+  "label_mapping": {
+    "0": 0,
+    "1": 1,
+    "3": 2,
+    "5": 3,
+    "6": 4,
+    "8": 5,
+    "10": 6,
+    "13": 7,
+    "14": 8,
+    "15": 9
+  },
+  "original_taxonomy": {
+    "classes": [
+      "Benign",
+      "Botnet",
+      "BruteForce",
+      "DDoS",
+      "DoS",
+      "FTP-Patator",
+      "GoldenEye",
+      "HeartBleed",
+      "Hulk",
+      "Infiltration",
+      "PortScan",
+      "Probe",
+      "R2L",
+      "SSH-Patator",
+      "Slowhttptest",
+      "Slowloris",
+      "U2R",
+      "WebAttack"
+    ],
+    "class_to_idx": {
+      "Benign": 0,
+      "Botnet": 1,
+      "BruteForce": 2,
+      "DDoS": 3,
+      "DoS": 4,
+      "FTP-Patator": 5,
+      "GoldenEye": 6,
+      "HeartBleed": 7,
+      "Hulk": 8,
+      "Infiltration": 9,
+      "PortScan": 10,
+      "Probe": 11,
+      "R2L": 12,
+      "SSH-Patator": 13,
+      "Slowhttptest": 14,
+      "Slowloris": 15,
+      "U2R": 16,
+      "WebAttack": 17
+    },
+    "taxonomy_details": {
+      "Benign": {
+        "severity": "INFO",
+        "category": "Normal",
+        "description": "Normal benign traffic"
+      },
+      "DoS": {
+        "severity": "HIGH",
+        "category": "Denial of Service",
+        "description": "Denial of Service attacks"
+      },
+      "DDoS": {
+        "severity": "CRITICAL",
+        "category": "Distributed Denial of Service",
+        "description": "Distributed DoS attacks"
+      },
+      "PortScan": {
+        "severity": "MEDIUM",
+        "category": "Reconnaissance",
+        "description": "Port scanning activity"
+      },
+      "BruteForce": {
+        "severity": "HIGH",
+        "category": "Credential Access",
+        "description": "Brute force password attacks"
+      },
+      "WebAttack": {
+        "severity": "HIGH",
+        "category": "Web Exploitation",
+        "description": "Web-based attacks (SQLi, XSS, etc.)"
+      },
+      "Infiltration": {
+        "severity": "CRITICAL",
+        "category": "Lateral Movement",
+        "description": "Network infiltration attempts"
+      },
+      "Botnet": {
+        "severity": "CRITICAL",
+        "category": "Command and Control",
+        "description": "Botnet C&C traffic"
+      },
+      "HeartBleed": {
+        "severity": "CRITICAL",
+        "category": "Exploitation",
+        "description": "Heartbleed vulnerability exploitation"
+      },
+      "U2R": {
+        "severity": "CRITICAL",
+        "category": "Privilege Escalation",
+        "description": "User to Root attacks"
+      },
+      "R2L": {
+        "severity": "HIGH",
+        "category": "Remote Access",
+        "description": "Remote to Local attacks"
+      },
+      "Probe": {
+        "severity": "MEDIUM",
+        "category": "Reconnaissance",
+        "description": "Network probing"
+      },
+      "FTP-Patator": {
+        "severity": "HIGH",
+        "category": "Brute Force",
+        "description": "FTP brute force"
+      },
+      "SSH-Patator": {
+        "severity": "HIGH",
+        "category": "Brute Force",
+        "description": "SSH brute force"
+      },
+      "GoldenEye": {
+        "severity": "HIGH",
+        "category": "DoS",
+        "description": "GoldenEye DoS attack"
+      },
+      "Slowloris": {
+        "severity": "HIGH",
+        "category": "DoS",
+        "description": "Slowloris DoS attack"
+      },
+      "Hulk": {
+        "severity": "HIGH",
+        "category": "DoS",
+        "description": "Hulk DoS attack"
+      },
+      "Slowhttptest": {
+        "severity": "HIGH",
+        "category": "DoS",
+        "description": "SlowHTTPTest DoS attack"
+      }
+    }
+  }
+}

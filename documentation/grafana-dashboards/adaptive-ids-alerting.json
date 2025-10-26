@@ -1,0 +1,279 @@
+{
+  "dashboard": {
+    "title": "Adaptive IDS - Alerting & Integrations",
+    "description": "Alert generation, dispatching, and external integration metrics",
+    "tags": [
+      "adaptive-ids",
+      "alerting",
+      "integrations"
+    ],
+    "timezone": "browser",
+    "schemaVersion": 36,
+    "version": 1,
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Alerts Created (Rate)",
+        "type": "stat",
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(ids_alerts_created_total[5m]))",
+            "legendFormat": "alerts/sec",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 2
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Alerts Suppressed (Rate)",
+        "type": "stat",
+        "gridPos": {
+          "x": 6,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(ids_alerts_suppressed_total[5m]))",
+            "legendFormat": "suppressed/sec",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 2
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Alert Dispatch Success Rate",
+        "type": "gauge",
+        "gridPos": {
+          "x": 12,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(ids_alerts_dispatched_total{status=\"success\"}[5m])) / sum(rate(ids_alerts_dispatched_total[5m]))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "max": 1,
+            "min": 0,
+            "unit": "percentunit",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": 0,
+                  "color": "red"
+                },
+                {
+                  "value": 0.9,
+                  "color": "yellow"
+                },
+                {
+                  "value": 0.99,
+                  "color": "green"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Integration Health",
+        "type": "stat",
+        "gridPos": {
+          "x": 18,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(ids_alerts_dispatched_total{status=\"success\"}[5m])) by (destination)",
+            "legendFormat": "{{destination}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Alerts Created by Severity",
+        "type": "graph",
+        "gridPos": {
+          "x": 0,
+          "y": 4,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rate(ids_alerts_created_total[5m])",
+            "legendFormat": "{{severity}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Alerts/sec"
+          },
+          {
+            "format": "short"
+          }
+        ],
+        "stack": true
+      },
+      {
+        "id": 6,
+        "title": "Alerts Dispatched by Destination",
+        "type": "graph",
+        "gridPos": {
+          "x": 12,
+          "y": 4,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rate(ids_alerts_dispatched_total{status=\"success\"}[5m])",
+            "legendFormat": "{{destination}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Alerts/sec"
+          },
+          {
+            "format": "short"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "External Integration Latency (P95)",
+        "type": "graph",
+        "gridPos": {
+          "x": 0,
+          "y": 12,
+          "w": 24,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(ids_external_integration_latency_seconds_bucket[5m]))",
+            "legendFormat": "{{integration}} - {{operation}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "s",
+            "label": "Latency"
+          },
+          {
+            "format": "short"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Suppression Reasons",
+        "type": "piechart",
+        "gridPos": {
+          "x": 0,
+          "y": 20,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "sum by(reason) (increase(ids_alerts_suppressed_total[1h]))",
+            "legendFormat": "{{reason}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Dispatch Failures by Destination",
+        "type": "table",
+        "gridPos": {
+          "x": 12,
+          "y": 20,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "sum by(destination, status) (increase(ids_alerts_dispatched_total{status=\"error\"}[1h]))",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "status": true
+              },
+              "renameByName": {
+                "destination": "Destination",
+                "Value": "Failures"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Critical Alerts Timeline",
+        "type": "logs",
+        "gridPos": {
+          "x": 0,
+          "y": 28,
+          "w": 24,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "{service=\"alerting\"} |= \"CRITICAL\"",
+            "refId": "A"
+          }
+        ]
+      }
+    ]
+  }
+}
