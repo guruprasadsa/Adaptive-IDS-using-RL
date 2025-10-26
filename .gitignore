@@ -70,6 +70,7 @@ backend/__pycache__/
 backend/**/__pycache__/
 backend/**/*.pyc
 
+
 # Frontend Specific
 frontend/frontend/node_modules/
 frontend/frontend/dist/
@@ -109,9 +110,9 @@ monitor_*.py
 start-*.bat
 metrics_output.txt
 
-# Large Dataset Files (optional - uncomment if datasets are too large)
-# data/2017/*.csv
-# data/2018/*.csv
+Large Dataset Files (optional - uncomment if datasets are too large)
+data/2017/*.csv
+data/2018/*.csv
 
 # Model Checkpoints (optional - uncomment if too large)
 # backend/model/checkpoints/*.pth
