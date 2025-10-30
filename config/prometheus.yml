@@ -1,10 +1,10 @@
 # Prometheus Configuration for Adaptive IDS
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  scrape_interval: 10s
+  evaluation_interval: 10s
   external_labels:
     cluster: "adaptive-ids"
-    environment: "development"
+    environment: "production"
 
 # Alerting configuration (optional)
 alerting:
@@ -24,19 +24,23 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
-  # Backend API (Flask)
+  # Backend API (Flask) - Optimized scraping
   - job_name: "backend-api"
     static_configs:
       - targets: ["backend:5001"]
     metrics_path: "/metrics"
-    scrape_interval: 10s
+    scrape_interval: 5s # More frequent for API monitoring
+    scrape_timeout: 5s
+    honor_labels: true
 
-  # Model Inference Service (FastAPI)
+  # Model Inference Service (FastAPI) - High frequency for ML metrics
   - job_name: "model-service"
     static_configs:
       - targets: ["model-service:8000"]
     metrics_path: "/metrics"
-    scrape_interval: 10s
+    scrape_interval: 5s # Critical for ML performance monitoring
+    scrape_timeout: 5s
+    honor_labels: true
 
   # Feature Extractor (if running as separate service)
   - job_name: "feature-extractor"

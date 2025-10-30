@@ -101,6 +101,14 @@
     overflow-y: auto;
 }
 
+/* Sticky table headers helper */
+.table-sticky-header thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bg-secondary);
+}
+
 .severity-distribution-chart {
     display: flex;
     flex-direction: column;
@@ -367,12 +375,113 @@
     font-size: 1.25rem;
 }
 
+/* ===== PRINT STYLES (Reports/Analytics) ===== */
+@media print {
+
+    /* Layout adjustments */
+    body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .header,
+    .tabs-nav,
+    .action-buttons,
+    .btn,
+    .btn-icon,
+    .nav-item,
+    .pagination-controls {
+        display: none !important;
+    }
+
+    .reports-container,
+    .analytics-container,
+    .tab-content,
+    .analytics-card,
+    .reports-content,
+    .analytics-table-card,
+    .report-template-card {
+        box-shadow: none !important;
+        border: 1px solid #ddd !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0.5in !important;
+        background: #ffffff !important;
+    }
+
+    /* Ensure tables break gracefully */
+    table {
+        page-break-inside: auto;
+        border-collapse: collapse;
+    }
+
+    tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+
+    thead {
+        display: table-header-group;
+    }
+
+    tfoot {
+        display: table-footer-group;
+    }
+
+    .status-badge,
+    .severity-badge {
+        border: 1px solid #999 !important;
+        color: #000 !important;
+        background: transparent !important;
+    }
+}
+
 /* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: var(--z-index-modal, 1050);
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.modal.show {
+    display: flex;
+    opacity: 1;
+}
+
 .modal-content {
     background: var(--bg-primary);
     border-radius: var(--radius-lg);
     max-width: 600px;
-    width: 100%;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    animation: modalSlideIn 0.3s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }
 
 .modal-header {
@@ -381,12 +490,15 @@
     align-items: center;
     padding: var(--space-5);
     border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
 }
 
+.modal-header h2,
 .modal-header h3 {
     font-size: 1.25rem;
     font-weight: 600;
     color: var(--text-primary);
+    margin: 0;
 }
 
 .modal-close {
@@ -397,6 +509,9 @@
     border-radius: var(--radius-base);
     color: var(--text-secondary);
     transition: all var(--transition-base);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .modal-close:hover {
@@ -404,8 +519,14 @@
     color: var(--text-primary);
 }
 
+.modal-close .material-symbols-outlined {
+    font-size: 1.5rem;
+}
+
 .modal-body {
     padding: var(--space-5);
+    flex: 1;
+    overflow-y: auto;
 }
 
 .modal-footer {
@@ -425,6 +546,35 @@
     font-weight: 500;
     font-size: 0.875rem;
     color: var(--text-primary);
+}
+
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group input[type="password"],
+.form-group textarea,
+.form-group select {
+    width: 100%;
+    padding: var(--space-3);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-base);
+    font-size: 0.875rem;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: border-color var(--transition-base);
+    font-family: inherit;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.1);
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 100px;
 }
 
 .form-control {

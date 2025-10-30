@@ -9,7 +9,11 @@
 severity_mapping:
   # Normal traffic - informational only
   BENIGN: INFO
+  Benign: INFO
+  benign: INFO
   Normal: INFO
+  normal: INFO
+  NORMAL: INFO
 
   # Reconnaissance & scanning - low severity
   PortScan: LOW
@@ -58,23 +62,51 @@ severity_mapping:
   Brute Force -Web: MEDIUM
   Brute Force -XSS: MEDIUM
 
-  # Heartbleed - critical (data exfiltration)
-  Heartbleed: CRITICAL
+  # Additional attack types from CIC-IDS datasets
+  WebAttack: MEDIUM
+  BruteForce: MEDIUM
+  Slowloris: HIGH
+  Slowhttptest: HIGH
+  GoldenEye: HIGH
+  Hulk: HIGH
 
-  # Default for unknown classes
-  _default: MEDIUM
+  # Additional DoS variants
+  "DoS attacks-Hulk": MEDIUM
+  "DoS attacks-GoldenEye": MEDIUM
+  "DoS attacks-Slowloris": MEDIUM
+  "DoS attacks-SlowHTTPTest": MEDIUM
+
+  # Additional DDoS variants
+  "DDoS attacks-LOIC-HTTP": HIGH
+  "DDoS attacks-HOIC": HIGH
+  "DDOS attack-HOIC": HIGH
+  "DDOS attack-LOIC-UDP": HIGH
+
+  # Additional brute force variants
+  "FTP-BruteForce": MEDIUM
+  "SSH-Bruteforce": MEDIUM
+
+  # Additional web attack variants (with different names to avoid duplicates)
+  "Web Attack Brute Force Alt": MEDIUM
+  "Web Attack XSS Alt": MEDIUM
+  "Web Attack Sql Injection Alt": MEDIUM
+  "Brute Force Web Alt": MEDIUM
+  "Brute Force XSS Alt": MEDIUM
+
+  # Infiltration variants
+  InfilterationAlt: CRITICAL
 
 # ============================================================================
 # Confidence Thresholds
 # ============================================================================
 # Minimum confidence required to generate an alert at each severity level
-# TEMPORARY: Lowered for testing with untrained model
+# PRODUCTION-READY: Set appropriate thresholds
 confidence_thresholds:
   INFO: 0.0 # Always alert for informational (if enabled)
-  LOW: 0.05 # 5% confidence minimum (TESTING ONLY)
-  MEDIUM: 0.05 # 5% confidence minimum (TESTING ONLY)
-  HIGH: 0.05 # 5% confidence minimum (TESTING ONLY)
-  CRITICAL: 0.05 # 5% confidence minimum (TESTING ONLY)
+  LOW: 0.30 # 30% confidence minimum
+  MEDIUM: 0.50 # 50% confidence minimum
+  HIGH: 0.70 # 70% confidence minimum
+  CRITICAL: 0.80 # 80% confidence minimum
 
 # Confidence boost based on severity (multiplicative)
 # Used to promote alerts when confidence is borderline
@@ -94,14 +126,18 @@ alert_filtering:
   # Suppress INFO-level alerts by default (too noisy)
   suppress_info: true
 
-  # Suppress alerts for specific class names
+  # Suppress alerts for specific class names (case-insensitive matching in code)
   suppress_classes:
     - BENIGN
+    - Benign
+    - benign
     - Normal
+    - normal
+    - NORMAL
 
   # Minimum confidence for any alert (global threshold)
-  # TEMPORARY: Lowered for testing with untrained model
-  min_confidence: 0.05
+  # PRODUCTION-READY: Set appropriate threshold
+  min_confidence: 0.30
 
   # Deduplicate alerts within time window (seconds)
   deduplication_window: 300 # 5 minutes
@@ -157,28 +193,29 @@ integrations:
 
   # Email notifications - ENABLED (only active integration)
   email:
-    enabled: ${EMAIL_ENABLED:false}
+    enabled: ${EMAIL_ENABLED:true}
     smtp_host: ${SMTP_HOST:localhost}
     smtp_port: ${SMTP_PORT:587}
     smtp_tls: ${SMTP_TLS:true}
-    smtp_user: ${SMTP_USER:}
-    smtp_password: ${SMTP_PASSWORD:}
+    smtp_user: ${SMTP_USER:adaptiveids@gmail.com}
+    smtp_password: ${SMTP_PASSWORD:uxyf fvrw zlvp qkma}
 
-    from_address: ${EMAIL_FROM:}
-    to_addresses: ${EMAIL_TO:}
+    from_address: ${EMAIL_FROM:adaptiveids@gmail.com}
+    to_addresses: ${EMAIL_TO:guruprasadsa8@gmail.com}
     cc_addresses: ${EMAIL_CC:}
 
     # Subject template
     subject_template: "[{severity}] IDS Alert: {class_name} detected from {src_ip}"
 
     # Only email high-severity alerts
-    min_severity: HIGH
+    min_severity: ${EMAIL_MIN_SEVERITY:HIGH}
 
-    # Rate limiting (applied on top of global rate limits)
+    # Rate limiting (INCREASED LIMITS - applied on top of global rate limits)
     rate_limit:
       enabled: true
-      max_per_hour: 100
-      max_per_day: 500
+      max_per_minute: ${EMAIL_MAX_PER_MINUTE:10}
+      max_per_hour: ${EMAIL_MAX_PER_HOUR:500}
+      max_per_day: ${EMAIL_MAX_PER_DAY:10000}
 
   # All other integrations are disabled
   # Splunk HEC - DISABLED

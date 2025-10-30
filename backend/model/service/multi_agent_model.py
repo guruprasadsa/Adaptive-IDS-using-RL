@@ -222,24 +222,35 @@ class MultiAgentIDS(nn.Module):
             if idx < self.num_specialists:
                 self.specialists[idx].load_state_dict(specialist_state, strict=True)
     
-    def predict_with_routing(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def predict_with_routing(self, x: torch.Tensor, temperature: float = 3.0) -> Dict[str, torch.Tensor]:
         """
         Make predictions and return routing information.
+        
+        Args:
+            x: Input features tensor
+            temperature: Temperature for routing softmax (higher = more exploration)
+                        Default 3.0 to encourage diversity (was effectively 1.0)
         
         Returns dict with:
             - class_probs: Final class probabilities
             - routing_probs: Router's specialist selection probabilities
             - specialist_confidences: Each specialist's attack confidence
         """
-        # Get routing decisions
+        # Get routing decisions with temperature scaling
         routing_logits, value = self.router(x)
-        routing_probs = F.softmax(routing_logits, dim=1)
         
-        # Get specialist predictions
+        # Apply temperature to make routing more exploratory
+        # Higher temperature = flatter distribution = more diverse routing
+        routing_probs = F.softmax(routing_logits / temperature, dim=1)
+        
+        # Get specialist predictions with temperature scaling
         specialist_confidences = []
+        specialist_temp = max(1.5, temperature / 2.0)  # Use milder temperature for specialists
+        
         for specialist in self.specialists:
             q_values = specialist(x)
-            attack_prob = F.softmax(q_values, dim=1)[:, 1]  # Attack probability
+            # Apply temperature to specialist Q-values too
+            attack_prob = F.softmax(q_values / specialist_temp, dim=1)[:, 1]  # Attack probability
             specialist_confidences.append(attack_prob)
         
         specialist_confidences = torch.stack(specialist_confidences, dim=1)

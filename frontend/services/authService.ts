@@ -3,8 +3,8 @@
  * Authentication service for managing user authentication state
  */
 
-import { apiService } from '../api';
-import type { User, LoginResponse } from '../types';
+import { apiService } from '../apiService';
+import type { LoginResponse, User } from '../types';
 
 export type AuthState = {
     isAuthenticated: boolean;

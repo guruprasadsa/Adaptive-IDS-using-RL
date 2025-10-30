@@ -60,7 +60,7 @@ class Alert(db.Model):
     destination = db.Column(db.String(64))
     alert_type = db.Column(db.String(64))
     prediction = db.Column(db.String(128))
-    metadata = db.Column(JSONB)
+    alert_metadata = db.Column(JSONB)
     acknowledged = db.Column(db.Boolean, default=False)
     acknowledged_at = db.Column(db.DateTime(timezone=True))
     acknowledged_by = db.Column(db.String(128))
@@ -104,7 +104,7 @@ class Incident(db.Model):
     description = db.Column(db.Text, nullable=False)
     affected_systems = db.Column(db.Integer, nullable=False, default=0)
     alerts_count = db.Column(db.Integer, nullable=False, default=0)
-    related_alerts = db.Column(JSONB, nullable=False, default=[])
+    related_alerts = db.Column(JSONB, nullable=False, server_default='[]')
     
     def to_dict(self):
         return {

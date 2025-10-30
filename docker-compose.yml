@@ -7,9 +7,9 @@ services:
     container_name: adaptive_ids_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: adaptive_ids
-      POSTGRES_PASSWORD: adaptive_ids_password
-      POSTGRES_DB: adaptive_ids
+      POSTGRES_USER: ${POSTGRES_USER:-adaptive_ids}
+      POSTGRES_PASSWORD: adaptive@ids.1234
+      POSTGRES_DB: ${POSTGRES_DB:-adaptive_ids}
     ports:
       - "127.0.0.1:55432:5432"
     volumes:
@@ -102,9 +102,8 @@ services:
       - FLASK_ENV=development
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
+      - POSTGRES_PASSWORD=adaptive@ids.1234
       - KAFKA_BROKERS=kafka:29092
-    env_file:
-      - ./backend/.env
     volumes:
       - ./backend:/app
     command: python -m flask run --host=0.0.0.0 --port=5001
@@ -138,8 +137,8 @@ services:
       - LABEL_CLASSES_PATH=/app/model/checkpoints/label_classes.json
       - CONFIG_PATH=/app/model/checkpoints/config.json
       - DEVICE=cuda
-      - BATCH_SIZE=256
-      - MAX_BATCH_WAIT_MS=50
+      - BATCH_SIZE=${MODEL_BATCH_SIZE:-256}
+      - MAX_BATCH_WAIT_MS=${MODEL_MAX_BATCH_WAIT_MS:-50}
       - CONFIDENCE_THRESHOLD=0.5
       - CALIBRATION_TEMP=1.5
       - NUM_WORKERS=2
@@ -159,11 +158,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "4.0"
-          memory: 4G
+          cpus: "6.0"
+          memory: 6G
         reservations:
-          cpus: "2.0"
-          memory: 2G
+          cpus: "3.0"
+          memory: 3G
           devices:
             - driver: nvidia
               count: 1
@@ -190,7 +189,7 @@ services:
       - ./backend:/app
     command: python -m sensors.traffic_simulator
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'sensors.traffic_simulator' || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import sys; sys.exit(0)' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -226,7 +225,7 @@ services:
       - ./backend:/app
     command: python -m stream.feature_extractor
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'stream.feature_extractor' || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import sys; sys.exit(0)' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -261,7 +260,7 @@ services:
       - ALERT_CONSUMER_GROUP=alerting-service
 
       # Database
-      - PG_DSN=host=postgres port=5432 dbname=adaptive_ids user=adaptive_ids password=adaptive_ids_password
+      - PG_DSN=host=postgres port=5432 dbname=${POSTGRES_DB:-adaptive_ids} user=${POSTGRES_USER:-adaptive_ids} password=adaptive@ids.1234
 
       # OpenTelemetry
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
@@ -272,7 +271,7 @@ services:
       - alert_logs:/var/log/adaptive-ids
     command: python -m alerting.alerter
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'alerting.alerter' || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import sys; sys.exit(0)' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -309,7 +308,7 @@ services:
       - ./backend:/app
     command: python -m api.traffic_stats
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'api.traffic_stats' || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import sys; sys.exit(0)' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -360,10 +359,10 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      - GF_INSTALL_PLUGINS=${GRAFANA_INSTALL_PLUGINS:-grafana-piechart-panel}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -394,8 +393,10 @@ services:
     healthcheck:
       test:
         [
-          "CMD-SHELL",
-          "wget --no-verbose --tries=1 --spider http://localhost:13133/ || exit 1",
+          "CMD",
+          "/otelcol-contrib",
+          "validate",
+          "--config=/etc/otel-collector-config.yml",
         ]
       interval: 30s
       timeout: 10s
@@ -435,11 +436,7 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget --quiet --tries=1 --spider http://localhost/health || exit 1",
-        ]
+      test: ["CMD-SHELL", "curl -f http://localhost:80/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

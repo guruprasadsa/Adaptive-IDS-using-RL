@@ -53,30 +53,30 @@ class TrafficSimulator:
     
     # Common services and their typical behaviors
     TRAFFIC_PATTERNS = [
-        # Web traffic (HTTP/HTTPS) - Benign
-        {'name': 'web_http', 'proto': 'TCP', 'dst_port': 80, 'weight': 15, 'size_range': (60, 1500), 'attack': None},
-        {'name': 'web_https', 'proto': 'TCP', 'dst_port': 443, 'weight': 20, 'size_range': (60, 1500), 'attack': None},
+        # Web traffic (HTTP/HTTPS) - Benign (reduced to make room for attacks)
+        {'name': 'web_http', 'proto': 'TCP', 'dst_port': 80, 'weight': 8, 'size_range': (60, 1500), 'attack': None},
+        {'name': 'web_https', 'proto': 'TCP', 'dst_port': 443, 'weight': 10, 'size_range': (60, 1500), 'attack': None},
         
         # DNS queries - Benign
-        {'name': 'dns', 'proto': 'UDP', 'dst_port': 53, 'weight': 10, 'size_range': (60, 512), 'attack': None},
+        {'name': 'dns', 'proto': 'UDP', 'dst_port': 53, 'weight': 6, 'size_range': (60, 512), 'attack': None},
         
         # SSH connections - Benign
-        {'name': 'ssh', 'proto': 'TCP', 'dst_port': 22, 'weight': 3, 'size_range': (60, 200), 'attack': None},
+        {'name': 'ssh', 'proto': 'TCP', 'dst_port': 22, 'weight': 2, 'size_range': (60, 200), 'attack': None},
         
         # Database - Benign
         {'name': 'mysql', 'proto': 'TCP', 'dst_port': 3306, 'weight': 2, 'size_range': (60, 1000), 'attack': None},
         
-        # Attack patterns - More diverse
-        {'name': 'ddos_syn', 'proto': 'TCP', 'dst_port': 80, 'weight': 8, 'size_range': (40, 60), 'attack': 'DDoS'},
-        {'name': 'ddos_http', 'proto': 'TCP', 'dst_port': 80, 'weight': 7, 'size_range': (60, 100), 'attack': 'DDoS'},
-        {'name': 'hulk_flood', 'proto': 'TCP', 'dst_port': 80, 'weight': 6, 'size_range': (200, 1500), 'attack': 'Hulk'},
-        {'name': 'goldeneye', 'proto': 'TCP', 'dst_port': 80, 'weight': 5, 'size_range': (100, 500), 'attack': 'GoldenEye'},
-        {'name': 'slowloris', 'proto': 'TCP', 'dst_port': 80, 'weight': 4, 'size_range': (60, 100), 'attack': 'Slowloris'},
-        {'name': 'slowhttp', 'proto': 'TCP', 'dst_port': 80, 'weight': 4, 'size_range': (60, 200), 'attack': 'Slowhttptest'},
-        {'name': 'port_scan', 'proto': 'TCP', 'dst_port': None, 'weight': 6, 'size_range': (40, 60), 'attack': 'PortScan'},
-        {'name': 'ftp_brute', 'proto': 'TCP', 'dst_port': 21, 'weight': 4, 'size_range': (60, 150), 'attack': 'FTP-Patator'},
-        {'name': 'ssh_brute', 'proto': 'TCP', 'dst_port': 22, 'weight': 4, 'size_range': (60, 150), 'attack': 'SSH-Patator'},
-        {'name': 'botnet_c2', 'proto': 'TCP', 'dst_port': 6667, 'weight': 6, 'size_range': (100, 300), 'attack': 'Botnet'},
+        # Attack patterns - DDoS REDUCED, other attacks INCREASED for diversity
+        {'name': 'ddos_syn', 'proto': 'TCP', 'dst_port': 80, 'weight': 3, 'size_range': (40, 60), 'attack': 'DDoS'},
+        {'name': 'ddos_http', 'proto': 'TCP', 'dst_port': 80, 'weight': 2, 'size_range': (60, 100), 'attack': 'DDoS'},
+        {'name': 'hulk_flood', 'proto': 'TCP', 'dst_port': 80, 'weight': 15, 'size_range': (200, 1500), 'attack': 'Hulk'},
+        {'name': 'goldeneye', 'proto': 'TCP', 'dst_port': 80, 'weight': 14, 'size_range': (100, 500), 'attack': 'GoldenEye'},
+        {'name': 'slowloris', 'proto': 'TCP', 'dst_port': 80, 'weight': 13, 'size_range': (60, 100), 'attack': 'Slowloris'},
+        {'name': 'slowhttp', 'proto': 'TCP', 'dst_port': 80, 'weight': 12, 'size_range': (60, 200), 'attack': 'Slowhttptest'},
+        {'name': 'port_scan', 'proto': 'TCP', 'dst_port': None, 'weight': 16, 'size_range': (40, 60), 'attack': 'PortScan'},
+        {'name': 'ftp_brute', 'proto': 'TCP', 'dst_port': 21, 'weight': 13, 'size_range': (60, 150), 'attack': 'FTP-Patator'},
+        {'name': 'ssh_brute', 'proto': 'TCP', 'dst_port': 22, 'weight': 14, 'size_range': (60, 150), 'attack': 'SSH-Patator'},
+        {'name': 'botnet_c2', 'proto': 'TCP', 'dst_port': 6667, 'weight': 15, 'size_range': (100, 300), 'attack': 'Botnet'},
     ]
     
     # Internal network ranges
@@ -175,68 +175,92 @@ class TrafficSimulator:
         attack_type = pattern.get('attack', None)
         
         if attack_type == 'PortScan':
-            # Port scan - random ports, same source
+            # Port scan - sequential or random ports from same source
             dst_port = random.randint(1, 65535)
-            if random.random() < 0.8:  # 80% from same scanner
-                src_ip = '192.168.1.100'
+            if random.random() < 0.9:  # 90% from same scanners
+                src_ip = random.choice(['192.168.1.100', '192.168.1.101', '192.168.1.102'])
+            # Often scan multiple targets
+            if random.random() < 0.5:
+                dst_ip = f"10.0.0.{random.randint(1, 254)}"
+            size = random.randint(40, 64)  # Very small SYN packets
         
         elif attack_type == 'DDoS':
-            # DDoS - flood same target from multiple sources
-            if random.random() < 0.7:
-                dst_ip = '10.0.0.100'  # Common target
-            size = random.randint(40, 100)  # Small packets for SYN flood
+            # DDoS - flood same target from many sources with small packets
+            if random.random() < 0.8:
+                dst_ip = random.choice(['10.0.0.100', '10.0.0.101'])  # Common targets
+            # Many different source IPs (distributed attack)
+            src_ip = f"192.168.{random.randint(0, 2)}.{random.randint(1, 254)}"
+            size = random.randint(40, 90)  # Small packets for SYN flood
+            dst_port = random.choice([80, 443, 53, 22])  # Common target ports
         
         elif attack_type == 'Hulk':
-            # Hulk - HTTP flood with large payloads
-            dst_port = random.choice([80, 443])
-            if random.random() < 0.6:
+            # Hulk - HTTP flood with large payloads and high rate
+            dst_port = random.choice([80, 443, 8080])
+            if random.random() < 0.7:
                 dst_ip = '10.0.0.100'  # Target web server
-            size = random.randint(500, 1500)  # Large HTTP requests
+            size = random.randint(800, 1500)  # Very large HTTP requests
+            # Multiple concurrent connections from same source
+            if random.random() < 0.6:
+                src_ip = random.choice(['192.168.1.50', '192.168.1.51', '192.168.1.52'])
         
         elif attack_type == 'GoldenEye':
-            # GoldenEye - HTTP DoS with random parameters
-            dst_port = random.choice([80, 443])
-            if random.random() < 0.5:
+            # GoldenEye - HTTP DoS with random parameters and Keep-Alive
+            dst_port = random.choice([80, 443, 8080])
+            if random.random() < 0.6:
                 dst_ip = '10.0.0.100'
-            size = random.randint(200, 800)
+            size = random.randint(300, 900)  # Medium sized requests
+            # Randomize source ports more
+            src_port = random.randint(1024, 65535)
         
         elif attack_type == 'Slowloris':
-            # Slowloris - Keep-alive exhaustion, small packets
+            # Slowloris - Keep-alive exhaustion, very small packets, slow rate
             dst_port = 80
-            if random.random() < 0.8:
+            if random.random() < 0.85:
                 dst_ip = '10.0.0.100'
-                src_ip = '192.168.1.50'  # Single attacker
-            size = random.randint(60, 100)  # Small partial requests
+                # Single or few attackers
+                src_ip = random.choice(['192.168.1.60', '192.168.1.61'])
+            size = random.randint(40, 80)  # Very small partial requests
+            # Low packet rate is key characteristic
         
         elif attack_type == 'Slowhttptest':
-            # Slow HTTP - Slow headers/body
+            # Slow HTTP - Slow headers/body, POST requests
             dst_port = 80
-            if random.random() < 0.7:
+            if random.random() < 0.75:
                 dst_ip = '10.0.0.100'
-            size = random.randint(60, 200)
+                src_ip = random.choice(['192.168.1.70', '192.168.1.71', '192.168.1.72'])
+            size = random.randint(80, 250)  # Small to medium packets
         
         elif attack_type == 'FTP-Patator':
-            # FTP Brute force - Repeated login attempts
+            # FTP Brute force - Repeated login attempts to port 21
             dst_port = 21
-            if random.random() < 0.9:
-                src_ip = '192.168.1.150'  # Single attacker
+            if random.random() < 0.95:
+                src_ip = random.choice(['192.168.1.150', '192.168.1.151'])  # 1-2 attackers
                 dst_ip = '10.0.0.50'  # FTP server
-            size = random.randint(60, 150)
+            size = random.randint(60, 120)  # Small FTP commands
+            # High frequency from same source
         
         elif attack_type == 'SSH-Patator':
-            # SSH Brute force - Repeated login attempts
+            # SSH Brute force - Repeated login attempts to port 22
             dst_port = 22
-            if random.random() < 0.9:
-                src_ip = '192.168.1.151'  # Single attacker
+            if random.random() < 0.95:
+                src_ip = random.choice(['192.168.1.160', '192.168.1.161'])  # 1-2 attackers
                 dst_ip = '10.0.0.51'  # SSH server
-            size = random.randint(60, 150)
+            size = random.randint(70, 130)  # Small SSH auth packets
+            # High frequency from same source
         
         elif attack_type == 'Botnet':
-            # Botnet C2 - Periodic beaconing
-            dst_port = random.choice([6667, 8080, 443])  # IRC or HTTP C2
-            if random.random() < 0.4:
-                dst_ip = '203.0.113.50'  # C2 server
-            size = random.randint(100, 300)  # Small command packets
+            # Botnet C2 - Periodic beaconing, distinctive ports and patterns
+            dst_port = random.choice([6667, 6668, 8080, 443, 1337])  # IRC or HTTP C2
+            if random.random() < 0.5:
+                dst_ip = random.choice(['203.0.113.50', '203.0.113.51'])  # C2 servers
+            # Infected hosts beaconing
+            if random.random() < 0.7:
+                src_ip = random.choice([
+                    '192.168.1.200', '192.168.1.201', '192.168.1.202',
+                    '192.168.1.203', '192.168.1.204'
+                ])
+            size = random.randint(100, 400)  # Small to medium command packets
+            # Regular intervals are characteristic
         
         packet = {
             'ts': time.time(),

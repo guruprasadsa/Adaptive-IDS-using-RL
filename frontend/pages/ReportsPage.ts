@@ -59,6 +59,17 @@ const reportTemplates: ReportTemplate[] = [
     }
 ];
 
+/**
+ * Create the report generation modal container
+ */
+function createReportModal(): HTMLElement {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'report-generation-modal';
+    modal.style.display = 'none';
+    return modal;
+}
+
 export const renderReportsPage = (user: User | null = null): HTMLElement => {
     const main = document.createElement('main');
     main.className = 'main-content';
@@ -125,6 +136,10 @@ export const renderReportsPage = (user: User | null = null): HTMLElement => {
     // Assemble page
     container.appendChild(header);
     container.appendChild(contentArea);
+    
+    // Create modal container
+    const modalContainer = createReportModal();
+    container.appendChild(modalContainer);
     
     main.appendChild(container);
     
@@ -252,18 +267,27 @@ function handleTabSwitch(tab: string): void {
     switch (tab) {
         case 'templates':
             newTab = renderTemplatesTab();
+            contentArea.appendChild(newTab);
+            // Re-setup template button listeners after rendering
+            setTimeout(() => setupTemplateButtons(), 0);
             break;
         case 'recent':
             newTab = renderRecentReportsTab();
+            contentArea.appendChild(newTab);
+            // Load recent reports
+            loadRecentReports();
             break;
         case 'scheduled':
             newTab = renderScheduledReportsTab();
+            contentArea.appendChild(newTab);
+            // Load scheduled reports
+            loadScheduledReports();
             break;
         default:
             newTab = renderTemplatesTab();
+            contentArea.appendChild(newTab);
+            setTimeout(() => setupTemplateButtons(), 0);
     }
-    
-    contentArea.appendChild(newTab);
 }
 
 /**
@@ -293,9 +317,11 @@ export function renderReportGenerationModal(templateId: string): string {
                     <div class="form-group">
                         <label>Date Range</label>
                         <select class="form-control" id="report-date-range">
-                            <option value="1d">Last 24 Hours</option>
+                            <option value="24h">Last 24 Hours</option>
                             <option value="7d" selected>Last 7 Days</option>
                             <option value="30d">Last 30 Days</option>
+                            <option value="90d">Last 90 Days</option>
+                            <option value="ytd">Year to Date</option>
                             <option value="custom">Custom Range</option>
                         </select>
                     </div>
@@ -348,11 +374,11 @@ export function renderReportGenerationModal(templateId: string): string {
  * Setup event listeners for reports page
  */
 export const setupReportsEventListeners = async (): Promise<void> => {
-    // Generate Report button
+    // Generate Report button (header)
     const generateBtn = document.getElementById('generate-report-btn');
     if (generateBtn) {
         generateBtn.addEventListener('click', () => {
-            showGenerateReportModal();
+            showGenerateReportModal('alert-summary');
         });
     }
 
@@ -363,6 +389,9 @@ export const setupReportsEventListeners = async (): Promise<void> => {
             switchToScheduledTab();
         });
     }
+
+    // Template generation buttons
+    setupTemplateButtons();
 
     // Tab switching
     const tabBtns = document.querySelectorAll('.tab-btn');
@@ -382,6 +411,25 @@ export const setupReportsEventListeners = async (): Promise<void> => {
     // Load recent reports
     await loadRecentReports();
 };
+
+/**
+ * Setup event listeners for template buttons
+ */
+function setupTemplateButtons(): void {
+    const templateButtons = document.querySelectorAll('.generate-template-btn');
+    templateButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const target = e.target as HTMLElement;
+            const button = target.closest('.generate-template-btn') as HTMLElement;
+            if (button) {
+                const templateId = button.dataset.templateId;
+                if (templateId) {
+                    showGenerateReportModal(templateId);
+                }
+            }
+        });
+    });
+}
 
 /**
  * Switch to a specific tab
@@ -469,60 +517,65 @@ const loadScheduledReports = async (): Promise<void> => {
 /**
  * Show generate report modal
  */
-const showGenerateReportModal = (): void => {
-    const modal = document.getElementById('generate-report-modal');
-    if (modal) {
-        modal.classList.add('show');
+const showGenerateReportModal = (templateId: string): void => {
+    const modal = document.getElementById('report-generation-modal');
+    if (!modal) return;
 
-        // Modal close handlers
-        const closeBtn = modal.querySelector('.modal-close');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-                modal.classList.remove('show');
-            });
-        }
+    // Populate modal with content
+    modal.innerHTML = renderReportGenerationModal(templateId);
+    modal.style.display = 'flex';
+    modal.classList.add('show');
 
-        const cancelBtn = document.getElementById('cancel-report-btn');
-        if (cancelBtn) {
-            cancelBtn.addEventListener('click', () => {
-                modal.classList.remove('show');
-            });
-        }
-
-        // Backdrop click
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.classList.remove('show');
-            }
+    // Modal close handlers
+    const closeBtn = modal.querySelector('.modal-close');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+            modal.classList.remove('show');
         });
+    }
 
-        // Date range selector
-        const dateRangeSelect = document.getElementById('report-date-range') as HTMLSelectElement;
-        const customDateRange = document.getElementById('custom-date-range');
-        if (dateRangeSelect && customDateRange) {
-            dateRangeSelect.addEventListener('change', () => {
-                customDateRange.style.display = dateRangeSelect.value === 'custom' ? 'block' : 'none';
-            });
-        }
+    const cancelBtn = document.getElementById('cancel-report-btn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+            modal.classList.remove('show');
+        });
+    }
 
-        // Form submit
-        const form = document.getElementById('report-generation-form') as HTMLFormElement;
-        if (form) {
-            form.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                await handleGenerateReport(form, modal);
-            });
+    // Backdrop click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+            modal.classList.remove('show');
         }
+    });
+
+    // Date range selector
+    const dateRangeSelect = document.getElementById('report-date-range') as HTMLSelectElement;
+    const customDateRange = document.getElementById('custom-date-range');
+    if (dateRangeSelect && customDateRange) {
+        dateRangeSelect.addEventListener('change', () => {
+            customDateRange.style.display = dateRangeSelect.value === 'custom' ? 'block' : 'none';
+        });
+    }
+
+    // Form submit
+    const form = document.getElementById('report-generation-form') as HTMLFormElement;
+    if (form) {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await handleGenerateReport(form, modal, templateId);
+        });
     }
 };
 
 /**
  * Handle report generation
  */
-const handleGenerateReport = async (form: HTMLFormElement, modal: HTMLElement): Promise<void> => {
-    const formData = new FormData(form);
-    const reportType = formData.get('report_type') as string;
-    const dateRange = formData.get('date_range') as string;
+const handleGenerateReport = async (form: HTMLFormElement, modal: HTMLElement, templateId: string): Promise<void> => {
+    const reportName = (document.getElementById('report-name') as HTMLInputElement)?.value || '';
+    const dateRangeSelect = (document.getElementById('report-date-range') as HTMLSelectElement)?.value || '7d';
     
     // Determine format (for now, use first checked format)
     let format: 'json' | 'csv' | 'pdf' = 'json';
@@ -533,8 +586,8 @@ const handleGenerateReport = async (form: HTMLFormElement, modal: HTMLElement): 
     }
 
     // Build custom date range if needed
-    let finalDateRange = dateRange;
-    if (dateRange === 'custom') {
+    let finalDateRange = dateRangeSelect;
+    if (dateRangeSelect === 'custom') {
         const startDate = (document.getElementById('report-start-date') as HTMLInputElement)?.value;
         const endDate = (document.getElementById('report-end-date') as HTMLInputElement)?.value;
         if (startDate && endDate) {
@@ -553,7 +606,7 @@ const handleGenerateReport = async (form: HTMLFormElement, modal: HTMLElement): 
 
     try {
         const response = await generateReport({
-            report_type: reportType as any,
+            report_type: templateId as any,
             date_range: finalDateRange,
             format
         });
@@ -562,18 +615,19 @@ const handleGenerateReport = async (form: HTMLFormElement, modal: HTMLElement): 
 
         // If CSV, download immediately
         if (format === 'csv' && response.content) {
-            const filename = `${reportType}-${response.date_range.replace(/\s/g, '-')}.csv`;
+            const filename = `${templateId}-${response.date_range.replace(/\s/g, '-')}.csv`;
             downloadReportAsFile(response.content, filename, 'csv');
         }
 
         // If JSON, download data
         if (format === 'json' && response.data) {
-            const filename = `${reportType}-${response.date_range.replace(/\s/g, '-')}.json`;
+            const filename = `${templateId}-${response.date_range.replace(/\s/g, '-')}.json`;
             const content = JSON.stringify(response.data, null, 2);
             downloadReportAsFile(content, filename, 'json');
         }
 
         // Close modal
+        modal.style.display = 'none';
         modal.classList.remove('show');
 
         // Reload recent reports

@@ -3,7 +3,9 @@
  * Network traffic analytics, attack trends, and statistical insights
  */
 
+import Chart from "chart.js/auto";
 import { toast } from "../components/Toast";
+import type { AlertTrend } from "../services/analyticsService";
 import { exportAnalyticsToCSV, fetchAnalyticsData } from "../services/analyticsService";
 import type { User } from "../types";
 
@@ -301,11 +303,8 @@ async function loadAnalyticsData(timeRange: string): Promise<void> {
             severityDistribution.innerHTML = renderSeverityDistribution(data.severityDistribution);
         }
         
-        // Update alert trends chart (placeholder for now - would integrate Chart.js here)
-        const alertTrendsChart = document.getElementById('alert-trends-chart');
-        if (alertTrendsChart) {
-            alertTrendsChart.innerHTML = '<p style="text-align: center; color: #6c757d; padding: 2rem;">Chart visualization coming soon...</p>';
-        }
+        // Update alert trends chart
+        updateAlertTrendsChart(data.trends);
         
         toast.show({ message: 'Analytics data loaded successfully', type: 'success', duration: 2000 });
         
@@ -458,4 +457,80 @@ export function renderSeverityDistribution(distribution: { severity: string; cou
             `).join('')}
         </div>
     `;
+}
+
+// Keep a reference so we can destroy and re-create on updates
+let alertTrendsChartInstance: Chart | null = null;
+
+function updateAlertTrendsChart(trends: AlertTrend[]): void {
+    const container = document.getElementById('alert-trends-chart');
+    if (!container) return;
+
+    if (!trends || trends.length === 0) {
+        container.innerHTML = '<div class="empty-state-small">No trend data available</div>';
+        if (alertTrendsChartInstance) {
+            alertTrendsChartInstance.destroy();
+            alertTrendsChartInstance = null;
+        }
+        return;
+    }
+
+    // Prepare labels and data
+    const labels = trends.map(t => {
+        const d = new Date(t.time);
+        return isNaN(d.getTime()) ? t.time : d.toLocaleString();
+    });
+    const counts = trends.map(t => t.count);
+
+    // Render/replace canvas
+    container.innerHTML = '<canvas id="alert-trends-canvas" style="width: 100%; height: 300px;"></canvas>';
+    const canvas = document.getElementById('alert-trends-canvas') as HTMLCanvasElement | null;
+    if (!canvas) return;
+
+    // Destroy existing chart if any
+    if (alertTrendsChartInstance) {
+        alertTrendsChartInstance.destroy();
+        alertTrendsChartInstance = null;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    alertTrendsChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Alerts',
+                    data: counts,
+                    borderColor: '#0d6efd',
+                    backgroundColor: 'rgba(13, 110, 253, 0.15)',
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 2,
+                    pointHoverRadius: 4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true },
+                tooltip: { mode: 'index', intersect: false }
+            },
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: {
+                    ticks: { maxRotation: 0, autoSkip: true },
+                    grid: { display: false }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Alerts' }
+                }
+            }
+        }
+    });
 }

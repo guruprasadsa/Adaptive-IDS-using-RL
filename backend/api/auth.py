@@ -56,7 +56,7 @@ def _db_config() -> Dict[str, Any]:
         'port': int(os.getenv('POSTGRES_PORT', '55432')),
         'dbname': os.getenv('POSTGRES_DB', 'adaptive_ids'),
         'user': os.getenv('POSTGRES_USER', 'adaptive_ids'),
-        'password': os.getenv('POSTGRES_PASSWORD', 'adaptive_ids_password'),
+        'password': os.getenv('POSTGRES_PASSWORD', 'adaptive@ids.1234'),
     }
 
 

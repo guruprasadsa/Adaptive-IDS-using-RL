@@ -1,0 +1,9 @@
+version: "3.9"
+
+# Local development overrides to make frontend asset changes available
+# without rebuilding the Docker image. The Nginx container will serve the
+# locally built dist/ directory directly.
+services:
+  frontend:
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro

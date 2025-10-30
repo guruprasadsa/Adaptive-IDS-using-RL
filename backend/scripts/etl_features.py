@@ -348,19 +348,22 @@ class LabelMapper:
 
 
 def load_cic_dataset(data_path: Path, year: int, sample_size: Optional[int] = None) -> pd.DataFrame:
-    """Load CIC-IDS dataset from CSV files"""
+    """Load CIC-IDS dataset from CSV files (recursively searches subdirectories)"""
     logger.info(f"Loading CIC-IDS-{year} from {data_path}")
     
-    csv_files = list(data_path.glob('*.csv'))
+    # Recursively find all CSV files
+    csv_files = list(data_path.rglob('*.csv'))
     
     if not csv_files:
         raise FileNotFoundError(f"No CSV files found in {data_path}")
     
+    logger.info(f"Found {len(csv_files)} CSV files")
+    
     dfs = []
     for csv_file in csv_files:
         try:
-            logger.info(f"  Reading {csv_file.name}...")
-            df = pd.read_csv(csv_file, encoding='utf-8', low_memory=False)
+            logger.info(f"  Reading {csv_file.relative_to(data_path)}...")
+            df = pd.read_csv(csv_file, encoding='utf-8', low_memory=False, on_bad_lines='skip')
             
             # Sample if requested
             if sample_size and len(df) > sample_size:
@@ -494,9 +497,9 @@ def main():
     logger.info(f"Total samples: {len(X_all)}")
     logger.info(f"Class distribution: {np.bincount(y_all)}")
     
-    # Remove classes with too few samples (need at least 10 for stratified split)
+    # Remove classes with too few samples (need at least 5 for stratified split)
     class_counts = np.bincount(y_all)
-    min_samples_per_class = 10
+    min_samples_per_class = 5  # Reduced from 10 to keep more attack types
     
     logger.info("\nFiltering classes with insufficient samples...")
     valid_mask = np.ones(len(y_all), dtype=bool)
@@ -534,13 +537,23 @@ def main():
     
     # Stratified split: 70% train, 15% val, 15% test
     logger.info("\nSplitting dataset...")
-    X_train, X_temp, y_train, y_temp = train_test_split(
-        X_all, y_all_remapped, test_size=0.30, random_state=42, stratify=y_all_remapped
-    )
-    
-    X_val, X_test, y_val, y_test = train_test_split(
-        X_temp, y_temp, test_size=0.50, random_state=42, stratify=y_temp
-    )
+    try:
+        X_train, X_temp, y_train, y_temp = train_test_split(
+            X_all, y_all_remapped, test_size=0.30, random_state=42, stratify=y_all_remapped
+        )
+        
+        X_val, X_test, y_val, y_test = train_test_split(
+            X_temp, y_temp, test_size=0.50, random_state=42, stratify=y_temp
+        )
+    except ValueError as e:
+        logger.warning(f"Stratified split failed: {e}. Using random split instead.")
+        X_train, X_temp, y_train, y_temp = train_test_split(
+            X_all, y_all_remapped, test_size=0.30, random_state=42
+        )
+        
+        X_val, X_test, y_val, y_test = train_test_split(
+            X_temp, y_temp, test_size=0.50, random_state=42
+        )
     
     logger.info(f"Train: {len(X_train)} samples")
     logger.info(f"Val:   {len(X_val)} samples")

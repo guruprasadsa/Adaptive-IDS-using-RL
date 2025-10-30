@@ -57,7 +57,7 @@ export interface CreateScheduleRequest {
  */
 export const generateReport = async (request: GenerateReportRequest): Promise<ReportResponse> => {
     try {
-        const response = await apiClient.post<ReportResponse>('/api/reports/generate', request);
+        const response = await apiClient.post<ReportResponse>('/reports/generate', request);
         return response.data;
     } catch (error) {
         console.error('Error generating report:', error);
@@ -71,7 +71,7 @@ export const generateReport = async (request: GenerateReportRequest): Promise<Re
 export const getRecentReports = async (limit: number = 10): Promise<{ reports: RecentReport[], total: number }> => {
     try {
         const response = await apiClient.get<{ reports: RecentReport[], total: number }>(
-            `/api/reports/recent?limit=${limit}`
+            `/reports/recent?limit=${limit}`
         );
         return response.data;
     } catch (error) {
@@ -86,7 +86,7 @@ export const getRecentReports = async (limit: number = 10): Promise<{ reports: R
 export const downloadReport = async (reportId: string, format: string): Promise<Blob> => {
     try {
         const response = await apiClient.get(
-            `/api/reports/${reportId}/download?format=${format}`,
+            `/reports/${reportId}/download?format=${format}`,
             { responseType: 'blob' }
         );
         return response.data;
@@ -101,7 +101,7 @@ export const downloadReport = async (reportId: string, format: string): Promise<
  */
 export const deleteReport = async (reportId: string): Promise<void> => {
     try {
-        await apiClient.delete(`/api/reports/${reportId}`);
+        await apiClient.delete(`/reports/${reportId}`);
     } catch (error) {
         console.error('Error deleting report:', error);
         throw error;
@@ -114,7 +114,7 @@ export const deleteReport = async (reportId: string): Promise<void> => {
 export const getReportSchedules = async (): Promise<{ schedules: ReportSchedule[], total: number }> => {
     try {
         const response = await apiClient.get<{ schedules: ReportSchedule[], total: number }>(
-            '/api/reports/schedules'
+            '/reports/schedules'
         );
         return response.data;
     } catch (error) {
@@ -128,7 +128,7 @@ export const getReportSchedules = async (): Promise<{ schedules: ReportSchedule[
  */
 export const createReportSchedule = async (schedule: CreateScheduleRequest): Promise<ReportSchedule> => {
     try {
-        const response = await apiClient.post<ReportSchedule>('/api/reports/schedules', schedule);
+        const response = await apiClient.post<ReportSchedule>('/reports/schedules', schedule);
         return response.data;
     } catch (error) {
         console.error('Error creating report schedule:', error);
@@ -144,7 +144,7 @@ export const updateReportSchedule = async (
     updates: Partial<CreateScheduleRequest>
 ): Promise<void> => {
     try {
-        await apiClient.put(`/api/reports/schedules/${scheduleId}`, updates);
+        await apiClient.put(`/reports/schedules/${scheduleId}`, updates);
     } catch (error) {
         console.error('Error updating report schedule:', error);
         throw error;
@@ -156,7 +156,7 @@ export const updateReportSchedule = async (
  */
 export const deleteReportSchedule = async (scheduleId: string): Promise<void> => {
     try {
-        await apiClient.delete(`/api/reports/schedules/${scheduleId}`);
+        await apiClient.delete(`/reports/schedules/${scheduleId}`);
     } catch (error) {
         console.error('Error deleting report schedule:', error);
         throw error;

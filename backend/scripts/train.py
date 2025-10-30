@@ -1020,6 +1020,16 @@ def main(args):
     # Close writer
     writer.close()
     
+    # Save label_classes.json for API consumption
+    with open(output_dir / 'label_classes.json', 'w') as f:
+        json.dump(taxonomy['classes'], f, indent=2)
+    
+    # Also save to checkpoints directory for API discovery
+    with open(checkpoint_dir / 'label_classes.json', 'w') as f:
+        json.dump(taxonomy['classes'], f, indent=2)
+    
+    logger.info(f"Saved label classes to {output_dir / 'label_classes.json'} and {checkpoint_dir / 'label_classes.json'}")
+    
     logger.info("="*70)
     logger.info("Training Complete!")
     logger.info("="*70)

@@ -340,7 +340,7 @@ netstat -ano | findstr :5001
 
 - **Documentation**: Check the `documentation/` folder first
 - **Issues**: Open an issue on GitHub
-- **Email**: Contact the maintainers
+- **Email**: guruprasadsa8@gmail.com
 
 ---
 

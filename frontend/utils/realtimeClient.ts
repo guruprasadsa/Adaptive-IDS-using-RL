@@ -39,7 +39,7 @@ export class RealtimeClient {
      * @param topic - Kafka topic to stream from ('alerts' or 'predictions')
      */
     connect(topic: string = 'alerts'): void {
-        if (this.eventSource) {
+        if (this.eventSource && this.currentStatus === 'connected') {
             console.warn('Already connected to SSE stream');
             return;
         }

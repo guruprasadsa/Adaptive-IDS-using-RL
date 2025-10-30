@@ -15,6 +15,22 @@ const renderStatCards = (cards: StatCardData[]): HTMLElement[] => {
 
 const formatLabel = (value: string): string => value.replace(/_/g, ' ').replace(/\b\w/g, (char: string) => char.toUpperCase());
 
+// Format timestamp to relative time (e.g., "2m ago", "Just now")
+const formatRelativeTime = (timestamp: string): string => {
+    const now = new Date().getTime();
+    const time = new Date(timestamp).getTime();
+    const diffMs = now - time;
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    const diffHours = Math.floor(diffMinutes / 60);
+    
+    if (diffSeconds < 5) return 'Just now';
+    if (diffSeconds < 60) return `${diffSeconds}s ago`;
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return new Date(timestamp).toLocaleDateString();
+};
+
 const renderRecentAlerts = (alerts: Alert[]): HTMLElement => {
     const priorityClasses: Record<Alert['priority'], string> = {
         critical: 'priority-critical',
@@ -54,7 +70,7 @@ const renderRecentAlerts = (alerts: Alert[]): HTMLElement => {
                 <p>${alert.description}</p>
                 <span>${formatLabel(alert.className || 'Unknown')} • ${alert.srcIp || alert.source || 'N/A'}</span>
             </div>
-            <time class="alert-time">${new Date(alert.timestamp).toLocaleTimeString()}</time>
+            <time class="alert-time">${formatRelativeTime(alert.timestamp)}</time>
         `;
         
         alertList.appendChild(listItem);

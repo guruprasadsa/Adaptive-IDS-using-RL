@@ -134,8 +134,16 @@ class SeverityClassifier:
         Returns:
             Severity level or None if below threshold
         """
-        # Get base severity from mapping
-        severity = self.severity_mapping.get(class_name, self.default_severity)
+        # Get base severity from mapping (try exact match first, then case-insensitive)
+        severity = self.severity_mapping.get(class_name)
+        if severity is None:
+            # Try case-insensitive match for common variants
+            for key, val in self.severity_mapping.items():
+                if key.lower() == class_name.lower():
+                    severity = val
+                    break
+        if severity is None:
+            severity = self.default_severity
         
         # Check confidence threshold
         threshold = self.confidence_thresholds.get(severity, 0.5)
@@ -159,7 +167,9 @@ class AlertFilter:
             config: Service configuration
         """
         self.suppress_info = config.get('alert_filtering', 'suppress_info', default=True)
-        self.suppress_classes = set(config.get('alert_filtering', 'suppress_classes', default=[]))
+        # Convert suppress_classes to lowercase for case-insensitive matching
+        suppress_classes_raw = config.get('alert_filtering', 'suppress_classes', default=[])
+        self.suppress_classes = set(cls.lower() for cls in suppress_classes_raw)
         self.min_confidence = config.get('alert_filtering', 'min_confidence', default=0.5)
         
         # Deduplication
@@ -188,8 +198,10 @@ class AlertFilter:
         if self.suppress_info and alert.get('severity') == 'INFO':
             return False
         
-        # Check class suppression
-        if alert.get('class_name') in self.suppress_classes:
+        # Check class suppression (case-insensitive)
+        class_name = alert.get('class_name', '').lower()
+        if class_name in self.suppress_classes:
+            logger.debug(f"Alert suppressed for class: {alert.get('class_name')}")
             return False
         
         # Check deduplication
@@ -423,6 +435,11 @@ class AlertDispatcher:
         # Email
         if self.config.get('integrations', 'email', 'enabled', default=False):
             try:
+                # Get rate limits with proper defaults
+                max_per_minute = self.config.get('integrations', 'email', 'rate_limit', 'max_per_minute', default=10)
+                max_per_hour = self.config.get('integrations', 'email', 'rate_limit', 'max_per_hour', default=500)
+                max_per_day = self.config.get('integrations', 'email', 'rate_limit', 'max_per_day', default=5000)
+                
                 integrations['email'] = EmailClient(
                     smtp_host=self.config.get('integrations', 'email', 'smtp_host', default='localhost'),
                     smtp_port=self.config.get('integrations', 'email', 'smtp_port', default=587),
@@ -433,11 +450,11 @@ class AlertDispatcher:
                     to_addresses=self.config.get('integrations', 'email', 'to_addresses', default='security-team@example.com'),
                     cc_addresses=self.config.get('integrations', 'email', 'cc_addresses', default=None),
                     subject_template=self.config.get('integrations', 'email', 'subject_template', default=''),
-                    max_per_minute=self.config.get('integrations', 'email', 'rate_limit', 'max_per_hour', default=10) // 60,
-                    max_per_hour=self.config.get('integrations', 'email', 'rate_limit', 'max_per_hour', default=10),
-                    max_per_day=self.config.get('integrations', 'email', 'rate_limit', 'max_per_day', default=50)
+                    max_per_minute=max_per_minute,
+                    max_per_hour=max_per_hour,
+                    max_per_day=max_per_day
                 )
-                logger.info("Email integration enabled")
+                logger.info(f"Email integration enabled: max_per_minute={max_per_minute}, max_per_hour={max_per_hour}, max_per_day={max_per_day}")
             except Exception as e:
                 logger.error(f"Failed to initialize email integration: {e}")
         

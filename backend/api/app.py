@@ -125,7 +125,7 @@ def _db_config() -> Dict[str, Any]:
 		"port": int(os.getenv("POSTGRES_PORT", "5432")),
 		"dbname": os.getenv("POSTGRES_DB", "adaptive_ids"),
 		"user": os.getenv("POSTGRES_USER", "adaptive_ids"),
-		"password": os.getenv("POSTGRES_PASSWORD", "adaptive_ids_password"),
+		"password": os.getenv("POSTGRES_PASSWORD", "adaptive@ids.1234"),
 	}
 
 
@@ -158,10 +158,14 @@ class DatabaseService:
 
 	def fetch_dashboard_stats(self) -> Dict[str, Any]:
 		with self.cursor() as cur:
-			cur.execute("SELECT COUNT(*) AS count FROM alerts")
+			cur.execute("SELECT COUNT(*) AS count FROM alerts WHERE deleted_at IS NULL")
 			total_alerts = int(cur.fetchone()["count"])
 
-			cur.execute("SELECT COUNT(*) AS count FROM alerts WHERE priority = %s", ("critical",))
+			cur.execute(
+				"SELECT COUNT(*) AS count FROM alerts "
+				"WHERE deleted_at IS NULL AND (priority = %s OR UPPER(severity) = %s)",
+				("critical", "CRITICAL")
+			)
 			critical_alerts = int(cur.fetchone()["count"])
 
 			cur.execute(
@@ -174,18 +178,20 @@ class DatabaseService:
 			total_incidents = int(cur.fetchone()["count"])
 
 			cur.execute(
-				"SELECT alert_id, priority, description, source, timestamp, status, alert_type, confidence "
-				"FROM alerts ORDER BY timestamp DESC LIMIT 5"
+				"SELECT alert_id, priority, description, source, timestamp, status, alert_type, confidence, "
+				"severity, class_name, class_idx, src_ip, dst_ip, src_port, dst_port, protocol, "
+				"model_version, feature_version, assigned_to, notes "
+				"FROM alerts WHERE deleted_at IS NULL ORDER BY timestamp DESC LIMIT 5"
 			)
 			recent_alerts = [self._map_alert(row) for row in cur.fetchall()]
-
+			
 			cur.execute(
 				"SELECT incident_id, title, status, severity, assigned_to, created_at, last_updated_at, summary, "
 				"description, affected_systems, alerts_count, related_alerts "
 				"FROM incidents ORDER BY last_updated_at DESC LIMIT 5"
 			)
 			recent_incidents = [self._map_incident(row) for row in cur.fetchall()]
-
+		
 		return {
 			"total_alerts": total_alerts,
 			"critical_alerts": critical_alerts,
@@ -391,21 +397,43 @@ class DatabaseService:
 	def _map_alert(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 		if not row:
 			return None
+		
+		# Use class_name as fallback for description and type if they're null
+		class_name = row.get("class_name") or "Unknown"
+		description = row.get("description") or class_name
+		alert_type = row.get("alert_type") or class_name
+		
+		# Map severity to priority if priority is null
+		severity = row.get("severity")
+		priority = row.get("priority")
+		if not priority and severity:
+			# Map severity to priority
+			severity_to_priority = {
+				"CRITICAL": "critical",
+				"HIGH": "high",
+				"MEDIUM": "medium",
+				"LOW": "low",
+				"INFO": "low"
+			}
+			priority = severity_to_priority.get(severity.upper(), "medium")
+		elif not priority:
+			priority = "medium"
+		
 		result = {
 			"id": row["alert_id"],
-			"priority": row["priority"],
-			"description": row["description"],
-			"source": row["source"],
+			"priority": priority,
+			"description": description,
+			"source": row.get("source") or row.get("src_ip") or "ML Model",
 			"timestamp": _to_iso(row["timestamp"]),
 			"status": row["status"],
-			"type": row["alert_type"],
+			"type": alert_type,
 			"confidence": float(row["confidence"]),
 		}
 		# Add optional fields if they exist in the row
-		if "severity" in row and row["severity"]:
-			result["severity"] = row["severity"]
-		if "class_name" in row and row["class_name"]:
-			result["className"] = row["class_name"]
+		if severity:
+			result["severity"] = severity
+		if class_name:
+			result["className"] = class_name
 		if "class_idx" in row and row["class_idx"] is not None:
 			result["classIdx"] = int(row["class_idx"])
 		if "src_ip" in row and row["src_ip"]:
@@ -602,14 +630,65 @@ class ModelService:
 		self._attempt_model_load()
 
 	def _load_label_classes(self) -> List[str]:
-		run_dir = _latest_run_dir()
-		if not run_dir:
-			return ["BENIGN", "ATTACK"]
-		path = run_dir / "label_classes.json"
+		# Priority order for locating label classes:
+		# 1) Explicit env var path
+		# 2) Latest run directory (run_*)
+		# 3) Model checkpoints directory
+		# 4) Model output directory (flat)
+		# 5) Taxonomy file (classes array)
+		# 6) Safe default to binary
 		try:
-			return json.loads(path.read_text(encoding="utf-8"))
+			# 1) Environment override
+			env_path_str = os.environ.get("ADAPTIVE_IDS_LABELS_FILE")
+			if env_path_str:
+				labels_path = Path(env_path_str).expanduser()
+				if labels_path.is_file():
+					labels = json.loads(labels_path.read_text(encoding="utf-8"))
+					if isinstance(labels, list) and labels:
+						logging.info("Loaded label classes from ADAPTIVE_IDS_LABELS_FILE: %s (%d classes)", labels_path, len(labels))
+						return labels
+
+			# 2) Latest run directory
+			run_dir = _latest_run_dir()
+			if run_dir:
+				run_labels = run_dir / "label_classes.json"
+				if run_labels.is_file():
+					labels = json.loads(run_labels.read_text(encoding="utf-8"))
+					if isinstance(labels, list) and labels:
+						logging.info("Loaded label classes from run directory: %s (%d classes)", run_labels, len(labels))
+						return labels
+
+			# 3) Checkpoints directory
+			ckpt_labels = MODEL_ROOT / "checkpoints" / "label_classes.json"
+			if ckpt_labels.is_file():
+				labels = json.loads(ckpt_labels.read_text(encoding="utf-8"))
+				if isinstance(labels, list) and labels:
+					logging.info("Loaded label classes from checkpoints: %s (%d classes)", ckpt_labels, len(labels))
+					return labels
+
+			# 4) Flat output directory
+			out_labels = MODEL_ROOT / "output" / "label_classes.json"
+			if out_labels.is_file():
+				labels = json.loads(out_labels.read_text(encoding="utf-8"))
+				if isinstance(labels, list) and labels:
+					logging.info("Loaded label classes from output: %s (%d classes)", out_labels, len(labels))
+					return labels
+
+			# 5) Taxonomy fallback (use classes array)
+			taxonomy_path = PROJECT_ROOT.parent / "data" / "processed" / "taxonomy.json"
+			if taxonomy_path.is_file():
+				blob = json.loads(taxonomy_path.read_text(encoding="utf-8"))
+				classes = blob.get("classes")
+				if isinstance(classes, list) and classes:
+					logging.info("Loaded label classes from taxonomy: %s (%d classes)", taxonomy_path, len(classes))
+					return classes
+
 		except Exception:
-			return ["BENIGN", "ATTACK"]
+			# On any error, fall through to default
+			logging.exception("Failed to load label classes; using binary default")
+
+		# 6) Safe default
+		return ["BENIGN", "ATTACK"]
 
 	def _load_metrics(self) -> Dict[str, float]:
 		run_dir = _latest_run_dir()
@@ -813,6 +892,19 @@ class ModelService:
 
 		max_index = int(max(range(len(probabilities)), key=lambda i: probabilities[i]))
 		normalized = {labels[i]: float(probabilities[i]) for i in range(len(probabilities))}
+
+		# Heuristic post-processing to refine coarse classes (no retraining)
+		try:
+			from .heuristics import refine_prediction  # local import to avoid load issues
+			refined_top, refined_probs = refine_prediction(labels, normalized, features)
+			if refined_top and refined_top in refined_probs:
+				# Update labels ordering if refined class differs
+				if refined_top in labels:
+					max_index = labels.index(refined_top)
+				normalized = refined_probs
+		except Exception:
+			pass
+
 		return max_index, labels, normalized
 
 	def _prepare_input_tensor(self, features: Dict[str, float]):
@@ -881,12 +973,16 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-pro
 cors_origins_str = os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://localhost:3000,http://localhost:8080')
 cors_origins = [origin.strip() for origin in cors_origins_str.split(',')]
 
-# Handle wildcard for development
-if cors_origins_str == '*':
+# Handle wildcard for development only
+if cors_origins_str == '*' and os.getenv('FLASK_ENV') == 'development':
 	cors_origins = ['*']
+elif cors_origins_str == '*':
+	# In production, reject wildcard CORS
+	logging.warning("Wildcard CORS detected in production environment - using default origins")
+	cors_origins = ['http://localhost:8080']
 
-# Allow 'null' origin for file:// protocol (debug-frontend.html opened directly)
-if 'null' not in cors_origins:
+# Allow 'null' origin for file:// protocol (debug-frontend.html opened directly) only in development
+if os.getenv('FLASK_ENV') == 'development' and 'null' not in cors_origins:
 	cors_origins.append('null')
 
 CORS(app, resources={
@@ -933,18 +1029,19 @@ if os.getenv('COMPRESS_ENABLED', 'True') == 'True':
 	app.config['COMPRESS_MIN_SIZE'] = int(os.getenv('COMPRESS_MIN_SIZE', '500'))
 	logging.info("Response compression enabled")
 
-# Configure rate limiting
+# Configure rate limiting - set higher limits to avoid false positives
 if os.getenv('RATE_LIMIT_ENABLED', 'True') == 'True':
 	limiter = Limiter(
 		app=app,
 		key_func=get_remote_address,
-		default_limits=[os.getenv('RATE_LIMIT_DEFAULT', '100 per hour')],
+		default_limits=[os.getenv('RATE_LIMIT_DEFAULT', '1000 per hour')],  # Increased from 100 to 1000
 		storage_uri=os.getenv('RATE_LIMIT_STORAGE_URL', 'memory://'),
 		strategy='fixed-window'
 	)
-	logging.info("Rate limiting enabled")
+	logging.info("Rate limiting enabled with 1000 req/hour limit")
 else:
 	limiter = None
+	logging.info("Rate limiting disabled")
 
 # Import and setup middleware
 try:
@@ -996,6 +1093,14 @@ try:
 except ImportError as e:
 	logging.warning(f"Reports module not available: {e}")
 
+# Import and register alerts blueprint
+try:
+	from api.routes.alerts import alerts_bp
+	app.register_blueprint(alerts_bp)
+	logging.info("Alerts module loaded successfully")
+except ImportError as e:
+	logging.warning(f"Alerts module not available: {e}")
+
 
 # Initialize observability (metrics and tracing)
 if OBSERVABILITY_AVAILABLE:
@@ -1020,7 +1125,7 @@ if SECURITY_AVAILABLE:
 		logging.info("Secrets manager initialized")
 		
 		# Initialize audit logger
-		pg_dsn = os.getenv('PG_DSN', 'host=localhost port=55432 dbname=adaptive_ids user=adaptive_ids password=adaptive_ids_password')
+		pg_dsn = os.getenv('PG_DSN', 'host=localhost port=55432 dbname=adaptive_ids user=adaptive_ids password=adaptive@ids.1234')
 		audit_log_file = os.getenv('AUDIT_LOG_FILE', str(PROJECT_ROOT.parent / 'logs' / 'audit.log'))
 		init_audit_logger(pg_dsn=pg_dsn, log_file_path=audit_log_file)
 		logging.info("Audit logger initialized")

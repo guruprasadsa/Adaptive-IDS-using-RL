@@ -1,21 +1,21 @@
 // --- IMPORT TYPES ---
-import { apiService } from './api';
+import { apiService } from './apiService';
 import { Alert, AlertsState, DashboardStats, Incident, IncidentsState, ModelMetrics, PredictionResult, StatCardData } from './types';
 
 // --- IMPORT DATA ---
 import { defaultStatCards, navItems } from './data';
 
 // --- IMPORT PAGE RENDERERS ---
-import { renderAlertsPage } from './pages/AlertsPage';
+import { renderAlertsPage, setupAlertsEventListeners } from './pages/AlertsPage';
 import { renderAnalyticsPage } from './pages/AnalyticsPage';
 import { renderDashboard } from './pages/Dashboard';
 import { renderIncidentsPage, setupIncidentsEventListeners } from './pages/IncidentsPage';
 import { renderLoginPage } from './pages/LoginPage';
-import { renderReportsPage } from './pages/ReportsPage';
+import { renderReportsPage, setupReportsEventListeners } from './pages/ReportsPage';
 import { renderRLModelPage } from './pages/RLModelPage';
 
 // --- IMPORT COMPONENT RENDERERS ---
-import { createTrafficChart } from './components/Chart';
+import { createTrafficChart, destroyTrafficChart } from './components/Chart';
 import { renderHeader } from './components/Header';
 import { toast } from './components/Toast';
 
@@ -74,6 +74,10 @@ class App {
     constructor() {
         this.appContainer = document.getElementById('app-container')!;
         this.activePage = this.getInitialPage();
+
+        // Set global state for event handlers
+        window.alertsState = this.alertsState;
+        window.alerts = this.alerts;
 
         // Subscribe to auth state changes
         authService.subscribe((state: AuthState) => {
@@ -288,9 +292,13 @@ class App {
             setupIncidentsEventListeners(() => this.loadIncidents(), this.alerts);
         }
 
+        // Initialize alerts page event listeners
+        if (this.activePage === 'alerts' && !this.isLoading) {
+            setupAlertsEventListeners(() => this.loadAlerts());
+        }
+
         // Initialize reports page event listeners
         if (this.activePage === 'reports' && !this.isLoading) {
-            const { setupReportsEventListeners } = require('./pages/ReportsPage');
             setupReportsEventListeners();
         }
     }
@@ -352,7 +360,6 @@ class App {
                 if (page && page !== this.activePage) {
                     // Clean up chart when leaving dashboard
                     if (this.activePage === 'dashboard') {
-                        const { destroyTrafficChart } = require('./components/Chart');
                         destroyTrafficChart();
                     }
                     
@@ -505,7 +512,7 @@ class App {
         const filterType = select.dataset.filter;
         const value = select.value;
         
-        if (filterType && value) {
+        if (filterType) {
             if (filterType === 'priority') {
                 this.alertsState.filters.priority = value as 'all' | Alert['priority'];
             } else if (filterType === 'status') {
@@ -650,30 +657,34 @@ class App {
             return;
         }
 
-        // Format alert details
+        // Format alert details with better structure
         const details = `
 Alert Details:
---------------
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ID: ${matchedAlert.id}
-Priority: ${matchedAlert.priority}
+Priority: ${matchedAlert.priority.toUpperCase()}
 Severity: ${matchedAlert.severity || 'N/A'}
 Status: ${matchedAlert.status}
 Class: ${matchedAlert.className || 'Unknown'}
 Confidence: ${matchedAlert.confidence !== undefined ? (matchedAlert.confidence * 100).toFixed(1) + '%' : 'N/A'}
 
-Network:
-Source IP: ${matchedAlert.srcIp || matchedAlert.source || 'N/A'}
-Source Port: ${matchedAlert.srcPort || 'N/A'}
-Destination IP: ${matchedAlert.dstIp || 'N/A'}
-Destination Port: ${matchedAlert.dstPort || 'N/A'}
-Protocol: ${matchedAlert.protocol || 'N/A'}
+Network Information:
+  Source IP: ${matchedAlert.srcIp || matchedAlert.source || 'N/A'}
+  Source Port: ${matchedAlert.srcPort || 'N/A'}
+  Destination IP: ${matchedAlert.dstIp || 'N/A'}
+  Destination Port: ${matchedAlert.dstPort || 'N/A'}
+  Protocol: ${matchedAlert.protocol || 'N/A'}
 
-Description: ${matchedAlert.description}
+Description:
+${matchedAlert.description}
+
 Timestamp: ${new Date(matchedAlert.timestamp).toLocaleString()}
-
-Model: ${matchedAlert.modelVersion || 'N/A'}
+Model Version: ${matchedAlert.modelVersion || 'N/A'}
 Assigned To: ${matchedAlert.assignedTo || 'Unassigned'}
-Notes: ${matchedAlert.notes || 'None'}
+
+Notes:
+${matchedAlert.notes || 'None'}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         `.trim();
 
         window.alert(details);
@@ -733,7 +744,7 @@ Notes: ${matchedAlert.notes || 'None'}
         const filterType = select.dataset.filter;
         const value = select.value;
         
-        if (filterType && value) {
+        if (filterType) {
             if (filterType === 'severity') {
                 this.incidentsState.filters.severity = value as 'all' | Incident['severity'];
             } else if (filterType === 'status') {

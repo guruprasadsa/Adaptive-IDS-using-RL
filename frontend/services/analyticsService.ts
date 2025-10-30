@@ -56,12 +56,12 @@ export interface AnalyticsData {
 export async function fetchAnalyticsData(timeRange: string = '24h'): Promise<AnalyticsData> {
     try {
         const [summary, topAttacks, sourceIPs, destIPs, distribution, trends] = await Promise.all([
-            apiClient.get(`/api/analytics/summary?time_range=${timeRange}`),
-            apiClient.get(`/api/analytics/top-attacks?time_range=${timeRange}&limit=10`),
-            apiClient.get(`/api/analytics/top-source-ips?time_range=${timeRange}&limit=10`),
-            apiClient.get(`/api/analytics/top-dest-ips?time_range=${timeRange}&limit=10`),
-            apiClient.get(`/api/analytics/severity-distribution?time_range=${timeRange}`),
-            apiClient.get(`/api/analytics/trends?time_range=${timeRange}`)
+            apiClient.get(`/analytics/summary?time_range=${timeRange}`),
+            apiClient.get(`/analytics/top-attacks?time_range=${timeRange}&limit=10`),
+            apiClient.get(`/analytics/top-source-ips?time_range=${timeRange}&limit=10`),
+            apiClient.get(`/analytics/top-dest-ips?time_range=${timeRange}&limit=10`),
+            apiClient.get(`/analytics/severity-distribution?time_range=${timeRange}`),
+            apiClient.get(`/analytics/trends?time_range=${timeRange}`)
         ]);
 
         return {

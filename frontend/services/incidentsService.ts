@@ -37,7 +37,7 @@ export interface IncidentResponse {
  */
 export const createIncident = async (data: CreateIncidentRequest): Promise<IncidentResponse> => {
     try {
-        const response = await apiClient.post<IncidentResponse>('/api/incidents', data);
+        const response = await apiClient.post<IncidentResponse>('/incidents', data);
         return response.data;
     } catch (error) {
         console.error('Error creating incident:', error);
@@ -54,7 +54,7 @@ export const updateIncidentStatus = async (
 ): Promise<IncidentResponse> => {
     try {
         const response = await apiClient.patch<IncidentResponse>(
-            `/api/incidents/${incidentId}/status`, 
+            `/incidents/${incidentId}/status`, 
             { status }
         );
         return response.data;
@@ -73,7 +73,7 @@ export const assignIncident = async (
 ): Promise<IncidentResponse> => {
     try {
         const response = await apiClient.patch<IncidentResponse>(
-            `/api/incidents/${incidentId}/assign`, 
+            `/incidents/${incidentId}/assign`, 
             { assigned_to: assignedTo }
         );
         return response.data;
@@ -92,7 +92,7 @@ export const linkAlertsToIncident = async (
 ): Promise<IncidentResponse> => {
     try {
         const response = await apiClient.post<IncidentResponse>(
-            `/api/incidents/${incidentId}/alerts`, 
+            `/incidents/${incidentId}/alerts`, 
             { alert_ids: alertIds }
         );
         return response.data;
@@ -111,7 +111,7 @@ export const unlinkAlertFromIncident = async (
 ): Promise<IncidentResponse> => {
     try {
         const response = await apiClient.delete<IncidentResponse>(
-            `/api/incidents/${incidentId}/alerts/${alertId}`
+            `/incidents/${incidentId}/alerts/${alertId}`
         );
         return response.data;
     } catch (error) {

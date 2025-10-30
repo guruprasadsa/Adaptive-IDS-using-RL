@@ -173,17 +173,5 @@ backend/security/certs/*.crt
 *.key
 *.crt
 
-# Documentation - Development Notes (move to documentation/dev-notes/)
-FRONTEND_CONNECTION_FIXES.md
-FRONTEND_PRODUCTION_READY.md
-FRONTEND_QUICKSTART.md
-FRONTEND_READY.md
-FRONTEND_TODO_TRACKER.md
-METRICS_FIX.md
-NEXT_STEPS.md
-REALTIME_FRONTEND_FIX.md
-TEST_REALTIME_FRONTEND.md
-TRAFFIC_CHART_FIX.md
-ANALYTICS_COMPLETE.md
-ANALYTICS_REPORTS_IMPLEMENTATION.md
-START_HERE.md
+# Documentation - Development Notes (archived in documentation/dev-notes/)
+documentation/dev-notes/

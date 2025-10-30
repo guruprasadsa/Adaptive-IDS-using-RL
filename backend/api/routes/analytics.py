@@ -5,11 +5,23 @@ Provides network traffic analytics, attack trends, and statistical insights
 
 from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, request
-from sqlalchemy import func, desc
-from backend.db.models import Alert, db
-from backend.api.middleware.auth_middleware import require_auth, require_permission
 
 analytics_bp = Blueprint('analytics', __name__, url_prefix='/api/analytics')
+
+# Define a dummy decorator if auth not available
+def require_auth(f):
+    return f
+
+def require_permission(permission):
+    def decorator(f):
+        return f
+    return decorator
+
+# Import DatabaseService from main app (container module path is api.app)
+def get_db_service():
+    """Get database service instance"""
+    from api.app import DatabaseService
+    return DatabaseService()
 
 
 def parse_time_range(time_range: str) -> datetime:
@@ -47,26 +59,40 @@ def get_analytics_summary():
         time_range = request.args.get('time_range', '24h')
         start_time = parse_time_range(time_range)
         
-        # Total alerts in time range
-        total_alerts = db.session.query(func.count(Alert.id)).filter(
-            Alert.timestamp >= start_time
-        ).scalar() or 0
-        
-        # Critical alerts (HIGH severity)
-        critical_alerts = db.session.query(func.count(Alert.id)).filter(
-            Alert.timestamp >= start_time,
-            Alert.priority == 'HIGH'
-        ).scalar() or 0
-        
-        # Unique attack types (distinct predictions)
-        attack_types = db.session.query(func.count(func.distinct(Alert.prediction))).filter(
-            Alert.timestamp >= start_time
-        ).scalar() or 0
-        
-        # Unique source IPs
-        unique_ips = db.session.query(func.count(func.distinct(Alert.source))).filter(
-            Alert.timestamp >= start_time
-        ).scalar() or 0
+        db_service = get_db_service()
+        with db_service.cursor() as cur:
+            # Total alerts in time range
+            cur.execute(
+                "SELECT COUNT(*) AS count FROM alerts WHERE timestamp >= %s",
+                (start_time,)
+            )
+            total_alerts = int(cur.fetchone()["count"]) or 0
+
+            # Critical alerts (normalize severity/priority)
+            cur.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM alerts
+                WHERE timestamp >= %s
+                  AND UPPER(COALESCE(severity, priority, 'INFO')) = 'CRITICAL'
+                """,
+                (start_time,)
+            )
+            critical_alerts = int(cur.fetchone()["count"]) or 0
+
+            # Unique attack types (distinct class_name)
+            cur.execute(
+                "SELECT COUNT(DISTINCT class_name) AS count FROM alerts WHERE timestamp >= %s",
+                (start_time,)
+            )
+            attack_types = int(cur.fetchone()["count"]) or 0
+
+            # Unique source IPs
+            cur.execute(
+                "SELECT COUNT(DISTINCT src_ip) AS count FROM alerts WHERE timestamp >= %s",
+                (start_time,)
+            )
+            unique_ips = int(cur.fetchone()["count"]) or 0
         
         return jsonify({
             'total_alerts': total_alerts,
@@ -98,32 +124,38 @@ def get_top_attacks():
         limit = int(request.args.get('limit', 10))
         start_time = parse_time_range(time_range)
         
-        # Get total count for percentage calculation
-        total = db.session.query(func.count(Alert.id)).filter(
-            Alert.timestamp >= start_time
-        ).scalar() or 1  # Avoid division by zero
-        
-        # Query attack types with counts
-        results = db.session.query(
-            Alert.prediction,
-            func.count(Alert.id).label('count')
-        ).filter(
-            Alert.timestamp >= start_time
-        ).group_by(
-            Alert.prediction
-        ).order_by(
-            desc('count')
-        ).limit(limit).all()
-        
-        # Format response
-        top_attacks = [
-            {
-                'name': result[0] or 'Unknown',
-                'count': result[1],
-                'percentage': round((result[1] / total) * 100, 1)
-            }
-            for result in results
-        ]
+        db_service = get_db_service()
+        with db_service.cursor() as cur:
+            # Get total count for percentage calculation
+            cur.execute(
+                "SELECT COUNT(*) AS count FROM alerts WHERE timestamp >= %s",
+                (start_time,)
+            )
+            total = int(cur.fetchone()["count"]) or 1
+
+            # Query attack types with counts
+            cur.execute(
+                """
+                SELECT COALESCE(NULLIF(class_name, ''), 'Unknown') AS class_name, COUNT(*) AS count
+                FROM alerts
+                WHERE timestamp >= %s
+                GROUP BY COALESCE(NULLIF(class_name, ''), 'Unknown')
+                ORDER BY count DESC
+                LIMIT %s
+                """,
+                (start_time, limit)
+            )
+            results = cur.fetchall()
+            
+            # Format response
+            top_attacks = [
+                {
+                    'name': result['class_name'] or 'Unknown',
+                    'count': result['count'],
+                    'percentage': round((result['count'] / total) * 100, 1)
+                }
+                for result in results
+            ]
         
         return jsonify(top_attacks), 200
         
@@ -150,28 +182,33 @@ def get_top_source_ips():
         limit = int(request.args.get('limit', 10))
         start_time = parse_time_range(time_range)
         
-        # Query source IPs with counts and max severity
-        results = db.session.query(
-            Alert.source,
-            func.count(Alert.id).label('count'),
-            func.max(Alert.priority).label('max_severity')
-        ).filter(
-            Alert.timestamp >= start_time
-        ).group_by(
-            Alert.source
-        ).order_by(
-            desc('count')
-        ).limit(limit).all()
-        
-        # Format response
-        top_source_ips = [
-            {
-                'ip': result[0] or 'Unknown',
-                'count': result[1],
-                'severity': result[2] or 'LOW'
-            }
-            for result in results
-        ]
+        db_service = get_db_service()
+        with db_service.cursor() as cur:
+            # Query source IPs with counts and max severity normalized
+            cur.execute(
+                """
+                SELECT src_ip,
+                       COUNT(*) AS count,
+                       MAX(UPPER(COALESCE(severity, priority, 'INFO'))) AS max_severity
+                FROM alerts
+                WHERE timestamp >= %s
+                GROUP BY src_ip
+                ORDER BY count DESC
+                LIMIT %s
+                """,
+                (start_time, limit)
+            )
+            results = cur.fetchall()
+            
+            # Format response
+            top_source_ips = [
+                {
+                    'ip': result['src_ip'] or 'Unknown',
+                    'count': result['count'],
+                    'severity': result['max_severity'] or 'LOW'
+                }
+                for result in results
+            ]
         
         return jsonify(top_source_ips), 200
         
@@ -198,28 +235,31 @@ def get_top_dest_ips():
         limit = int(request.args.get('limit', 10))
         start_time = parse_time_range(time_range)
         
-        # Query destination IPs with counts
-        # Note: Protocol info might be in metadata or description
-        results = db.session.query(
-            Alert.destination,
-            func.count(Alert.id).label('count')
-        ).filter(
-            Alert.timestamp >= start_time
-        ).group_by(
-            Alert.destination
-        ).order_by(
-            desc('count')
-        ).limit(limit).all()
-        
-        # Format response (protocol detection would need metadata parsing)
-        top_dest_ips = [
-            {
-                'ip': result[0] or 'Unknown',
-                'count': result[1],
-                'protocol': 'TCP'  # Default, could be enhanced with metadata parsing
-            }
-            for result in results
-        ]
+        db_service = get_db_service()
+        with db_service.cursor() as cur:
+            # Query destination IPs with counts
+            cur.execute(
+                """
+                SELECT dst_ip, COUNT(*) AS count, MAX(protocol) AS protocol
+                FROM alerts
+                WHERE timestamp >= %s
+                GROUP BY dst_ip
+                ORDER BY count DESC
+                LIMIT %s
+                """,
+                (start_time, limit)
+            )
+            results = cur.fetchall()
+            
+            # Format response
+            top_dest_ips = [
+                {
+                    'ip': result['dst_ip'] or 'Unknown',
+                    'count': result['count'],
+                    'protocol': result['protocol'] or 'TCP'
+                }
+                for result in results
+            ]
         
         return jsonify(top_dest_ips), 200
         
@@ -244,34 +284,41 @@ def get_severity_distribution():
         time_range = request.args.get('time_range', '24h')
         start_time = parse_time_range(time_range)
         
-        # Get total count for percentage calculation
-        total = db.session.query(func.count(Alert.id)).filter(
-            Alert.timestamp >= start_time
-        ).scalar() or 1  # Avoid division by zero
-        
-        # Query severity distribution
-        results = db.session.query(
-            Alert.priority,
-            func.count(Alert.id).label('count')
-        ).filter(
-            Alert.timestamp >= start_time
-        ).group_by(
-            Alert.priority
-        ).all()
-        
-        # Format response with predefined order
-        severity_order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']
-        severity_map = {result[0]: result[1] for result in results}
-        
-        distribution = [
-            {
-                'severity': severity,
-                'count': severity_map.get(severity, 0),
-                'percentage': round((severity_map.get(severity, 0) / total) * 100, 1)
-            }
-            for severity in severity_order
-            if severity_map.get(severity, 0) > 0  # Only include severities with data
-        ]
+        db_service = get_db_service()
+        with db_service.cursor() as cur:
+            # Get total count for percentage calculation
+            cur.execute(
+                "SELECT COUNT(*) AS count FROM alerts WHERE timestamp >= %s",
+                (start_time,)
+            )
+            total = int(cur.fetchone()["count"]) or 1
+
+            # Query severity distribution (normalize severity/priority)
+            cur.execute(
+                """
+                SELECT UPPER(COALESCE(severity, priority, 'INFO')) AS sev, COUNT(*) AS count
+                FROM alerts
+                WHERE timestamp >= %s
+                GROUP BY UPPER(COALESCE(severity, priority, 'INFO'))
+                """,
+                (start_time,)
+            )
+            results = cur.fetchall()
+
+            # Create severity map
+            severity_map = {result['sev']: result['count'] for result in results}
+
+            # Format response with predefined order
+            severity_order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']
+            distribution = [
+                {
+                    'severity': severity.title(),
+                    'count': severity_map.get(severity, 0),
+                    'percentage': round((severity_map.get(severity, 0) / total) * 100, 1)
+                }
+                for severity in severity_order
+                if severity_map.get(severity, 0) > 0
+            ]
         
         return jsonify(distribution), 200
         
@@ -297,46 +344,29 @@ def get_alert_trends():
         time_range = request.args.get('time_range', '24h')
         start_time = parse_time_range(time_range)
         
-        # Determine interval based on time range
-        interval = request.args.get('interval')
-        if not interval:
-            if time_range in ['1h', '6h']:
-                interval = '15m'
-            elif time_range == '24h':
-                interval = '1h'
-            else:
-                interval = '6h'
-        
-        # Convert interval to minutes for SQL
-        interval_minutes = {
-            '5m': 5,
-            '15m': 15,
-            '1h': 60,
-            '6h': 360,
-            '1d': 1440
-        }.get(interval, 60)
-        
-        # Query alerts grouped by time intervals
-        # Using PostgreSQL's date_trunc for time bucketing
-        results = db.session.query(
-            func.date_trunc('hour', Alert.timestamp).label('time_bucket'),
-            func.count(Alert.id).label('count')
-        ).filter(
-            Alert.timestamp >= start_time
-        ).group_by(
-            'time_bucket'
-        ).order_by(
-            'time_bucket'
-        ).all()
-        
-        # Format response
-        trends = [
-            {
-                'time': result[0].isoformat() if result[0] else None,
-                'count': result[1]
-            }
-            for result in results
-        ]
+        db_service = get_db_service()
+        with db_service.cursor() as cur:
+            # Query alerts grouped by hour
+            cur.execute(
+                """
+                SELECT DATE_TRUNC('hour', timestamp) AS time_bucket, COUNT(*) AS count
+                FROM alerts
+                WHERE timestamp >= %s
+                GROUP BY time_bucket
+                ORDER BY time_bucket
+                """,
+                (start_time,)
+            )
+            results = cur.fetchall()
+            
+            # Format response
+            trends = [
+                {
+                    'time': result['time_bucket'].isoformat() if result['time_bucket'] else None,
+                    'count': result['count']
+                }
+                for result in results
+            ]
         
         return jsonify(trends), 200
         

@@ -88,6 +88,32 @@
     --accent-color-active: var(--color-primary-700);
     --accent-color-light: var(--color-primary-100);
 
+    /* Inputs */
+    --input-bg: var(--bg-primary);
+    --input-border: var(--border-color);
+
+    /* Navigation (header) */
+    --sidebar-text: var(--text-secondary);
+    --sidebar-text-hover: var(--text-primary);
+
+    /* Priority tokens (used in index.css) */
+    --priority-critical: var(--color-critical);
+    --priority-high: var(--color-high);
+    --priority-medium: var(--color-medium);
+    --priority-low: var(--color-low);
+
+    /* Status tokens (used in index.css) */
+    --status-new-bg: var(--color-status-new-bg);
+    --status-new-text: var(--color-status-new-text);
+    --status-acknowledged-bg: var(--color-status-acknowledged-bg);
+    --status-acknowledged-text: var(--color-status-acknowledged-text);
+    --status-resolved-bg: var(--color-status-resolved-bg);
+    --status-resolved-text: var(--color-status-resolved-text);
+    --status-investigating-bg: var(--color-status-investigating-bg);
+    --status-investigating-text: var(--color-status-investigating-text);
+    --status-closed-bg: var(--color-status-closed-bg);
+    --status-closed-text: var(--color-status-closed-text);
+
     /* ===== SPACING SCALE ===== */
     --space-1: 4px;
     --space-2: 8px;
@@ -181,6 +207,9 @@
     --header-height: 60px;
     --sidebar-width: 260px;
     --container-max-width: 1400px;
+
+    /* Inform the UA for built-in form controls */
+    color-scheme: light dark;
 }
 
 /* ===== DARK MODE THEME ===== */
@@ -212,6 +241,10 @@
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
     --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
     --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+
+    /* Navigation (header) */
+    --sidebar-text: var(--color-neutral-300);
+    --sidebar-text-hover: var(--color-neutral-100);
 }
 
 /* ===== REDUCED MOTION ===== */
@@ -224,5 +257,20 @@
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
+    }
+}
+
+/* ===== GLOBAL SELECTION COLORS ===== */
+::selection {
+    background: rgba(40, 167, 69, 0.2);
+    color: inherit;
+}
+
+/* ===== HIGH CONTRAST (Forced Colors) ===== */
+@media (forced-colors: active) {
+    :root {
+        /* Use system colors for borders/outlines */
+        --border-color: CanvasText;
+        --input-border: CanvasText;
     }
 }

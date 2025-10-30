@@ -39,19 +39,35 @@ export default defineConfig(({ mode }) => {
         }
       },
 
-      // Build configuration
+      // Build configuration - optimized for production
       build: {
         outDir: 'dist',
-        sourcemap: false,
-        // Optimize chunks
+        sourcemap: mode === 'development',
+        minify: 'esbuild', // Use esbuild (default, faster than terser)
+        target: 'es2020', // ES2020 supports top-level await
+        // Optimize chunks for better caching
         rollupOptions: {
           output: {
             manualChunks: {
-              'vendor': ['react', 'react-dom', 'axios', '@tanstack/react-query'],
+              'vendor': ['react', 'react-dom'],
+              'query': ['@tanstack/react-query'],
               'charts': ['chart.js'],
-            }
-          }
-        }
+              'utils': ['axios'],
+            },
+            // Optimize chunk names for better caching
+            chunkFileNames: 'assets/[name]-[hash].js',
+            entryFileNames: 'assets/[name]-[hash].js',
+            assetFileNames: 'assets/[name]-[hash].[ext]',
+          },
+          // Tree shaking optimization
+          treeshake: {
+            moduleSideEffects: false,
+          },
+        },
+        // Increase chunk size warning limit
+        chunkSizeWarningLimit: 1000,
+        // Enable CSS code splitting
+        cssCodeSplit: true,
       },
 
       // Enable CSS source maps in development

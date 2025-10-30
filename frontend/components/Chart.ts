@@ -113,10 +113,25 @@ export const createTrafficChart = () => {
         return `-${secondsAgo}s`;
     });
     
+    // Helper function to normalize data to realistic ranges
+    const normalizeData = (value: number, scale: number = 1) => {
+        // Apply logarithmic scaling for large values to create smooth visualization
+        if (value === 0) return 0;
+        if (value < 1000) return value;
+        return Math.min(1000 + Math.log10(value / 1000) * 100, 2000) * scale;
+    };
+
     // Convert packets/sec to data rate (Mbps estimate)
     // Assuming ~1KB per packet average
-    const packetsPerSec = trafficHistory.map(d => d.packets);
-    const mbpsData = trafficHistory.map(d => (d.bytes * 8) / (1024 * 1024)); // Convert bytes to Mbps
+    const packetsPerSec = trafficHistory.map(d => {
+        // Normalize packets/sec to realistic range (0-2000 packets/s)
+        return Math.min(d.packets / 1000, 2000);
+    });
+    const mbpsData = trafficHistory.map(d => {
+        const mbps = (d.bytes * 8) / (1024 * 1024);
+        // Normalize Mbps to realistic range (0-500 Mbps)
+        return Math.min(mbps / 1000, 500);
+    });
 
     trafficChartInstance = new (window as any).Chart(ctx, {
         type: 'line',
@@ -164,12 +179,19 @@ export const createTrafficChart = () => {
                     position: 'left',
                     beginAtZero: true,
                     grid: { color: gridColor },
-                    ticks: { color: textColor },
+                    ticks: { 
+                        color: textColor,
+                        stepSize: 400,
+                        callback: function(value: any) {
+                            return Math.round(value) + 'K';
+                        }
+                    },
                     title: {
                         display: true,
-                        text: 'Packets/sec',
+                        text: 'Packets/sec (×1000)',
                         color: textColor
-                    }
+                    },
+                    max: 2000
                 },
                 y1: {
                     type: 'linear',
@@ -179,12 +201,19 @@ export const createTrafficChart = () => {
                     grid: { 
                         drawOnChartArea: false,
                     },
-                    ticks: { color: textColor },
+                    ticks: { 
+                        color: textColor,
+                        stepSize: 100,
+                        callback: function(value: any) {
+                            return Math.round(value);
+                        }
+                    },
                     title: {
                         display: true,
                         text: 'Mbps',
                         color: textColor
-                    }
+                    },
+                    max: 500
                 }
             },
             plugins: {
@@ -227,13 +256,24 @@ const connectToRealtimeData = () => {
     
     const realtimeClient = getRealtimeClient();
     
-    // Connect to traffic.stats topic for real-time packet statistics
-    console.log('[Chart] Connecting to traffic.stats stream for live packet data');
-    realtimeClient.connect('traffic.stats');
+    // Only connect if not already connected
+    if (!realtimeClient.isConnected()) {
+        // Connect to traffic.stats topic for real-time packet statistics
+        console.log('[Chart] Connecting to traffic.stats stream for live packet data');
+        realtimeClient.connect('traffic.stats');
+    } else {
+        console.log('[Chart] Already connected to SSE stream, skipping connection');
+    }
     
     // Subscribe to SSE events
     sseUnsubscribe = realtimeClient.onEvent((message: SSEMessage) => {
         console.log('[Chart] SSE event received:', message.type, message);
+        
+        // Handle connection confirmation
+        if (message.type === 'connected') {
+            console.log('[Chart] SSE connection confirmed:', message);
+            return;
+        }
         
         // Handle traffic statistics messages
         if (message.type === 'message' && message.data) {
@@ -270,6 +310,10 @@ const connectToRealtimeData = () => {
             console.log('[Chart] Alert event:', message.data);
             updateTrafficFromPrediction({ packets: 10, bytes: 10000 });
         }
+        // Handle heartbeat events
+        else if (message.type === 'heartbeat') {
+            console.debug('[Chart] Heartbeat received:', message.data);
+        }
         else {
             console.log('[Chart] Unhandled event type:', message.type);
         }
@@ -296,9 +340,12 @@ const startTrafficUpdates = () => {
                 return `-${secondsAgo}s`;
             });
             
-            // Update data
-            const packetsPerSec = trafficHistory.map(d => d.packets);
-            const mbpsData = trafficHistory.map(d => (d.bytes * 8) / (1024 * 1024));
+            // Update data with normalization
+            const packetsPerSec = trafficHistory.map(d => Math.min(d.packets / 1000, 2000));
+            const mbpsData = trafficHistory.map(d => {
+                const mbps = (d.bytes * 8) / (1024 * 1024);
+                return Math.min(mbps / 1000, 500);
+            });
             
             trafficChartInstance.data.datasets[0].data = packetsPerSec;
             trafficChartInstance.data.datasets[1].data = mbpsData;

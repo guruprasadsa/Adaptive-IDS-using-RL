@@ -330,3 +330,123 @@ export const renderAlertsPageContent = (alerts: Alert[], totalAlerts: number, st
     const newPagination = renderPagination(totalAlerts, state);
     return { table: newTable, pagination: newPagination };
 };
+
+export const setupAlertsEventListeners = (onRefresh: () => void) => {
+    // Sort functionality
+    document.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        const sortableHeader = target.closest('.sortable[data-sort-key]') as HTMLElement;
+        
+        if (sortableHeader) {
+            const sortKey = sortableHeader.dataset.sortKey as keyof Alert;
+            if (sortKey) {
+                // Toggle sort direction or set new column
+                const currentSort = window.alertsState?.sortColumn;
+                const currentDirection = window.alertsState?.sortDirection;
+                
+                if (currentSort === sortKey) {
+                    window.alertsState.sortDirection = currentDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    window.alertsState.sortColumn = sortKey;
+                    window.alertsState.sortDirection = 'asc';
+                }
+                
+                onRefresh();
+            }
+        }
+    });
+
+    // Filter functionality
+    document.addEventListener('input', (e) => {
+        const target = e.target as HTMLInputElement | HTMLSelectElement;
+        const filterKey = target.dataset.filter;
+        
+        if (filterKey && window.alertsState) {
+            const value = target.type === 'number' ? 
+                (target.value ? parseFloat(target.value) : undefined) :
+                target.value;
+            
+            if (value !== undefined && value !== '') {
+                window.alertsState.filters[filterKey] = value;
+            } else {
+                delete window.alertsState.filters[filterKey];
+            }
+            
+            // Reset to first page when filtering
+            window.alertsState.currentPage = 1;
+            
+            // Debounce filter updates
+            clearTimeout(window.alertsFilterTimeout);
+            window.alertsFilterTimeout = setTimeout(() => {
+                onRefresh();
+            }, 300);
+        }
+    });
+
+    // Apply filters button
+    document.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.id === 'apply-filters-btn' || target.closest('#apply-filters-btn')) {
+            onRefresh();
+        }
+    });
+
+    // Clear filters button
+    document.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.id === 'clear-filters-btn' || target.closest('#clear-filters-btn')) {
+            if (window.alertsState) {
+                window.alertsState.filters = {};
+                window.alertsState.currentPage = 1;
+                
+                // Clear all filter inputs
+                document.querySelectorAll('[data-filter]').forEach((input: any) => {
+                    if (input.type === 'number') {
+                        input.value = '';
+                    } else {
+                        input.value = '';
+                    }
+                });
+                
+                onRefresh();
+            }
+        }
+    });
+
+    // Alert action buttons
+    document.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        const button = target.closest('.ack-alert-btn, .fp-alert-btn, .view-alert-btn') as HTMLElement;
+        
+        if (button) {
+            const alertId = button.dataset.alertId;
+            const action = button.classList.contains('ack-alert-btn') ? 'ack' :
+                          button.classList.contains('fp-alert-btn') ? 'fp' : 'view';
+            
+            if (alertId) {
+                handleAlertAction(alertId, action, onRefresh);
+            }
+        }
+    });
+};
+
+const handleAlertAction = async (alertId: string, action: string, onRefresh: () => void) => {
+    try {
+        if (action === 'ack') {
+            await fetch(`/api/alerts/${alertId}/acknowledge`, { method: 'POST' });
+        } else if (action === 'fp') {
+            await fetch(`/api/alerts/${alertId}/false-positive`, { method: 'POST' });
+        } else if (action === 'view') {
+            // Open alert details modal
+            const alert = window.alerts?.find(a => a.id === alertId);
+            if (alert) {
+                // You can implement a modal here
+                console.log('View alert:', alert);
+            }
+        }
+        
+        onRefresh();
+    } catch (error) {
+        console.error(`Failed to ${action} alert ${alertId}:`, error);
+    }
+};

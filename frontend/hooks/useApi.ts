@@ -4,7 +4,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from '@tanstack/react-query';
-import { apiService } from '../api';
+import { apiService } from '../apiService';
 import type { 
     Alert, 
     Incident, 

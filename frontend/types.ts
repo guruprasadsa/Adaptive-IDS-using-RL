@@ -53,7 +53,7 @@ export type Incident = {
 export type AlertsState = {
     currentPage: number;
     itemsPerPage: number;
-    sortColumn: keyof Alert;
+    sortColumn: keyof Alert | null;
     sortDirection: 'asc' | 'desc';
     filters: {
         priority: 'all' | Alert['priority'];
@@ -69,6 +69,14 @@ export type AlertsState = {
         endTime?: string;
     };
 };
+
+declare global {
+    interface Window {
+        alertsState?: AlertsState;
+        alerts?: Alert[];
+        alertsFilterTimeout?: number;
+    }
+}
 
 export type IncidentsState = {
     currentPage: number;

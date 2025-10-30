@@ -71,16 +71,20 @@ class Config:
     
     # Inference configuration
     DEVICE = os.getenv("DEVICE", "cpu")  # cpu or cuda
-    BATCH_SIZE = int(os.getenv("BATCH_SIZE", "64"))
-    MAX_BATCH_WAIT_MS = int(os.getenv("MAX_BATCH_WAIT_MS", "50"))
+    BATCH_SIZE = int(os.getenv("BATCH_SIZE", "128"))  # Optimized for better throughput
+    MAX_BATCH_WAIT_MS = int(os.getenv("MAX_BATCH_WAIT_MS", "25"))  # Reduced latency
     CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.5"))
     
     # Performance tuning
-    NUM_WORKERS = int(os.getenv("NUM_WORKERS", "2"))
-    PREFETCH_COUNT = int(os.getenv("PREFETCH_COUNT", "100"))
+    NUM_WORKERS = int(os.getenv("NUM_WORKERS", "4"))  # Increased workers
+    PREFETCH_COUNT = int(os.getenv("PREFETCH_COUNT", "200"))  # Increased prefetch
     
     # Calibration (temperature scaling)
     CALIBRATION_TEMP = float(os.getenv("CALIBRATION_TEMP", "1.5"))
+    
+    # Router temperature for multi-agent model (higher = more exploration/diversity)
+    # Default 3.0 to counteract router bias and encourage diverse routing
+    ROUTER_TEMPERATURE = float(os.getenv("ROUTER_TEMPERATURE", "3.0"))
 
 
 config = Config()
@@ -364,8 +368,8 @@ class ModelManager:
             start_time = time.time()
             
             if self.is_multi_agent:
-                # Multi-agent inference with routing
-                predictions_dict = self.model.predict_with_routing(x)
+                # Multi-agent inference with routing temperature for diversity
+                predictions_dict = self.model.predict_with_routing(x, temperature=config.ROUTER_TEMPERATURE)
                 probs = predictions_dict['class_probs']
                 routing_probs = predictions_dict['routing_probs']
                 specialist_confidences = predictions_dict['specialist_confidences']
@@ -484,7 +488,7 @@ class InferenceWorker:
     def start(self):
         """Initialize Kafka consumer and producer"""
         try:
-            # Consumer configuration
+            # Consumer configuration - simplified for compatibility
             consumer_config = {
                 'bootstrap.servers': config.KAFKA_BROKERS,
                 'group.id': config.CONSUMER_GROUP,
@@ -498,13 +502,17 @@ class InferenceWorker:
             self.consumer.subscribe([config.FEATURES_TOPIC])
             logger.info(f"Subscribed to topic: {config.FEATURES_TOPIC}")
             
-            # Producer configuration
+            # Producer configuration - optimized for throughput
             producer_config = {
                 'bootstrap.servers': config.KAFKA_BROKERS,
                 'compression.type': 'lz4',
-                'linger.ms': 10,
-                'batch.size': 16384,
+                'linger.ms': 5,  # Reduced latency
+                'batch.size': 32768,  # Increased batch size
                 'enable.idempotence': True,
+                'acks': 'all',  # Required when idempotence is enabled
+                'retries': 3,
+                'retry.backoff.ms': 100,
+                'max.in.flight.requests.per.connection': 5,
             }
             
             self.producer = Producer(producer_config)

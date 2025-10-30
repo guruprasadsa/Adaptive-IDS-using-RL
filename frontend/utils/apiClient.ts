@@ -98,13 +98,20 @@ export class ApiError extends Error {
     }
 }
 
-// Create axios instance
+// Create axios instance with optimized configuration
 const apiClient: AxiosInstance = axios.create({
     baseURL: `${API_BASE_URL}/api`,
     timeout: API_TIMEOUT,
     headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
     },
+    // Enable compression
+    decompress: true,
+    // Optimize connection pooling
+    maxRedirects: 3,
+    // Note: httpAgent/httpsAgent are Node.js only, not needed in browser
 });
 
 // Request interceptor

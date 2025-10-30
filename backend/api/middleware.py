@@ -6,10 +6,21 @@ Middleware for request/response processing, compression, and rate limiting
 import logging
 import os
 import time
+import traceback
 from functools import wraps
-from typing import Any, Callable
+from typing import Any, Callable, Dict, Optional
 
 from flask import Request, Response, g, jsonify, request
+
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('logs/api.log', mode='a') if os.path.exists('logs') else logging.NullHandler()
+    ]
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,30 +30,43 @@ class RequestLogger:
 
     @staticmethod
     def log_request():
-        """Log incoming request details"""
+        """Log incoming request details with structured logging"""
         g.start_time = time.time()
+        g.request_id = f"{int(time.time() * 1000)}_{hash(request.remote_addr) % 10000}"
         
-        if os.getenv('FLASK_DEBUG') == 'True':
-            logger.info(
-                f"Request: {request.method} {request.path} "
-                f"from {request.remote_addr}"
-            )
+        # Always log requests in production, with more detail in debug mode
+        log_level = logging.DEBUG if os.getenv('FLASK_DEBUG') == 'True' else logging.INFO
+        
+        logger.log(log_level, 
+            f"Request started - ID: {g.request_id}, "
+            f"Method: {request.method}, Path: {request.path}, "
+            f"IP: {request.remote_addr}, User-Agent: {request.headers.get('User-Agent', 'Unknown')[:100]}"
+        )
 
     @staticmethod
     def log_response(response: Response) -> Response:
-        """Log response details with timing"""
+        """Log response details with timing and structured logging"""
         if hasattr(g, 'start_time'):
             duration = (time.time() - g.start_time) * 1000  # Convert to ms
+            request_id = getattr(g, 'request_id', 'unknown')
             
-            if os.getenv('FLASK_DEBUG') == 'True':
-                logger.info(
-                    f"Response: {request.method} {request.path} "
-                    f"Status: {response.status_code} "
-                    f"Duration: {duration:.2f}ms"
-                )
+            # Determine log level based on status code
+            if response.status_code >= 500:
+                log_level = logging.ERROR
+            elif response.status_code >= 400:
+                log_level = logging.WARNING
+            else:
+                log_level = logging.INFO
+            
+            logger.log(log_level,
+                f"Request completed - ID: {request_id}, "
+                f"Method: {request.method}, Path: {request.path}, "
+                f"Status: {response.status_code}, Duration: {duration:.2f}ms"
+            )
             
             # Add timing header
             response.headers['X-Response-Time'] = f"{duration:.2f}ms"
+            response.headers['X-Request-ID'] = request_id
         
         return response
 
@@ -70,20 +94,32 @@ class ErrorHandler:
 
     @staticmethod
     def handle_500(error):
-        """Handle internal server errors"""
-        logger.exception(f"Internal server error: {error}")
+        """Handle internal server errors with detailed logging"""
+        request_id = getattr(g, 'request_id', 'unknown')
+        logger.error(
+            f"Internal server error - ID: {request_id}, "
+            f"Path: {request.path}, Error: {str(error)}, "
+            f"Traceback: {traceback.format_exc()}"
+        )
         return jsonify({
             'error': 'internal_server_error',
-            'message': 'An unexpected error occurred'
+            'message': 'An unexpected error occurred',
+            'request_id': request_id
         }), 500
 
     @staticmethod
     def handle_exception(error):
-        """Handle uncaught exceptions"""
-        logger.exception(f"Unhandled exception: {error}")
+        """Handle uncaught exceptions with detailed logging"""
+        request_id = getattr(g, 'request_id', 'unknown')
+        logger.error(
+            f"Unhandled exception - ID: {request_id}, "
+            f"Path: {request.path}, Error: {str(error)}, "
+            f"Traceback: {traceback.format_exc()}"
+        )
         return jsonify({
             'error': 'internal_server_error',
-            'message': 'An unexpected error occurred'
+            'message': 'An unexpected error occurred',
+            'request_id': request_id
         }), 500
 
 
