@@ -1,4 +1,4 @@
-# Adaptive IDS v2.0
+# Adaptive IDS v2.1
 
 **Advanced Intrusion Detection System with Hybrid Multi-Agent Reinforcement Learning**
 
