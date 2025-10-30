@@ -587,6 +587,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-**Built with ❤️ for cybersecurity professionals**
+**Built with ❤️ for cybersecurity**
 
 For detailed setup and usage, start with the [**Installation Checklist**](./documentation/INSTALLATION_CHECKLIST.md) 👈
