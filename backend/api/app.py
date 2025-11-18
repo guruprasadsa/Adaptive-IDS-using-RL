@@ -989,7 +989,9 @@ CORS(app, resources={
 	r"/api/*": {
 		"origins": cors_origins,
 		"methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-		"allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+		# Include Cache-Control because some clients (browsers/axios) send this header
+		# during requests and it must be allowed in the preflight response.
+		"allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Cache-Control"],
 		"expose_headers": ["X-Response-Time"],
 		"supports_credentials": True if cors_origins != ['*'] else False,
 		"max_age": 3600
@@ -1007,13 +1009,15 @@ def handle_options(path):
 	if origin == 'null':
 		response.headers['Access-Control-Allow-Origin'] = 'null'
 		response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
-		response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+		# Allow Cache-Control header as well (sent by some clients)
+		response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Cache-Control'
 		response.headers['Access-Control-Max-Age'] = '3600'
 	# Check if origin is allowed
 	elif cors_origins == ['*'] or origin in cors_origins:
 		response.headers['Access-Control-Allow-Origin'] = origin or '*'
 		response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
-		response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+		# Mirror the allowed headers to include Cache-Control
+		response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Cache-Control'
 		response.headers['Access-Control-Max-Age'] = '3600'
 		if cors_origins != ['*']:
 			response.headers['Access-Control-Allow-Credentials'] = 'true'
